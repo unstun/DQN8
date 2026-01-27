@@ -660,6 +660,12 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--runs", type=int, default=5, help="Averaging runs for stochastic methods.")
     ap.add_argument(
+        "--progress",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Show an inference progress bar (default: on when running in a TTY).",
+    )
+    ap.add_argument(
         "--plot-run-idx",
         type=int,
         default=0,
@@ -1031,6 +1037,16 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
         return 2
 
+    progress = bool(sys.stderr.isatty()) if getattr(args, "progress", None) is None else bool(getattr(args, "progress"))
+    tqdm = None
+    if progress:
+        try:
+            from tqdm import tqdm as _tqdm  # type: ignore
+        except Exception:
+            tqdm = None
+        else:
+            tqdm = _tqdm
+
     requested_experiment_dir = resolve_experiment_dir(args.out, runs_root=args.runs_root)
     models_dir: Path | None = None
     if not bool(args.skip_rl):
@@ -1200,66 +1216,83 @@ def main(argv: list[str] | None = None) -> int:
                 goal_xy_tol_m = float(env.goal_tolerance_m)
                 goal_theta_tol_rad = float(env.goal_angle_tolerance_rad)
 
-            attempts = 0
-            while len(reset_options_list) < int(args.runs) and attempts < max_attempts:
-                env.reset(
-                    seed=int(args.seed) + 90_000 + int(attempts),
-                    options={
-                        "random_start_goal": True,
-                        "rand_min_cost_m": float(rand_min_cost_m),
-                        "rand_max_cost_m": rand_max,
-                        "rand_fixed_prob": float(args.rand_fixed_prob),
-                        "rand_tries": int(args.rand_tries),
-                    },
+            sample_pbar = None
+            if tqdm is not None:
+                sample_pbar = tqdm(
+                    total=int(args.runs),
+                    desc=f"Sample pairs {env_label}",
+                    unit="pair",
+                    dynamic_ncols=True,
+                    leave=False,
                 )
 
-                start_xy = (int(env.start_xy[0]), int(env.start_xy[1]))
-                goal_xy = (int(env.goal_xy[0]), int(env.goal_xy[1]))
-
-                # When the sampling constraints are too strict, the env falls back to the canonical
-                # (start,goal) pair after exhausting `rand_tries`. That defeats the purpose of
-                # random-pair evaluation and also breaks the short/long suite separation.
-                if float(getattr(args, "rand_fixed_prob", 0.0)) <= 0.0:
-                    if start_xy == (int(spec.start_xy[0]), int(spec.start_xy[1])) and goal_xy == (
-                        int(spec.goal_xy[0]),
-                        int(spec.goal_xy[1]),
-                    ):
-                        attempts += 1
-                        continue
-
-                    cost0 = float(env._cost_to_goal_m[int(start_xy[1]), int(start_xy[0])])
-                    if not math.isfinite(cost0):
-                        attempts += 1
-                        continue
-                    if float(cost0) + 1e-6 < float(rand_min_cost_m):
-                        attempts += 1
-                        continue
-                    if rand_max is not None and float(rand_max) > 0.0 and float(cost0) - 1e-6 > float(rand_max):
-                        attempts += 1
-                        continue
-
-                if reject_unreachable:
-                    res = plan_hybrid_astar(
-                        grid_map=grid_map,
-                        footprint=footprint,
-                        params=params,
-                        start_xy=start_xy,
-                        goal_xy=goal_xy,
-                        goal_theta_rad=0.0,
-                        start_theta_rad=None,
-                        goal_xy_tol_m=goal_xy_tol_m,
-                        goal_theta_tol_rad=goal_theta_tol_rad,
-                        timeout_s=float(args.baseline_timeout),
-                        max_nodes=int(args.hybrid_max_nodes),
+            attempts = 0
+            try:
+                while len(reset_options_list) < int(args.runs) and attempts < max_attempts:
+                    env.reset(
+                        seed=int(args.seed) + 90_000 + int(attempts),
+                        options={
+                            "random_start_goal": True,
+                            "rand_min_cost_m": float(rand_min_cost_m),
+                            "rand_max_cost_m": rand_max,
+                            "rand_fixed_prob": float(args.rand_fixed_prob),
+                            "rand_tries": int(args.rand_tries),
+                        },
                     )
-                    if not bool(res.success):
-                        attempts += 1
-                        continue
-                    precomputed_hybrid_paths.append(res)
 
-                opts: dict[str, object] = {"start_xy": start_xy, "goal_xy": goal_xy}
-                reset_options_list.append(opts)
-                attempts += 1
+                    start_xy = (int(env.start_xy[0]), int(env.start_xy[1]))
+                    goal_xy = (int(env.goal_xy[0]), int(env.goal_xy[1]))
+
+                    accept = True
+                    # When the sampling constraints are too strict, the env falls back to the canonical
+                    # (start,goal) pair after exhausting `rand_tries`. That defeats the purpose of
+                    # random-pair evaluation and also breaks the short/long suite separation.
+                    if float(getattr(args, "rand_fixed_prob", 0.0)) <= 0.0:
+                        if start_xy == (int(spec.start_xy[0]), int(spec.start_xy[1])) and goal_xy == (
+                            int(spec.goal_xy[0]),
+                            int(spec.goal_xy[1]),
+                        ):
+                            accept = False
+                        if accept:
+                            cost0 = float(env._cost_to_goal_m[int(start_xy[1]), int(start_xy[0])])
+                            if not math.isfinite(cost0):
+                                accept = False
+                            elif float(cost0) + 1e-6 < float(rand_min_cost_m):
+                                accept = False
+                            elif rand_max is not None and float(rand_max) > 0.0 and float(cost0) - 1e-6 > float(rand_max):
+                                accept = False
+
+                    if accept and reject_unreachable:
+                        res = plan_hybrid_astar(
+                            grid_map=grid_map,
+                            footprint=footprint,
+                            params=params,
+                            start_xy=start_xy,
+                            goal_xy=goal_xy,
+                            goal_theta_rad=0.0,
+                            start_theta_rad=None,
+                            goal_xy_tol_m=goal_xy_tol_m,
+                            goal_theta_tol_rad=goal_theta_tol_rad,
+                            timeout_s=float(args.baseline_timeout),
+                            max_nodes=int(args.hybrid_max_nodes),
+                        )
+                        if not bool(res.success):
+                            accept = False
+                        elif precomputed_hybrid_paths is not None:
+                            precomputed_hybrid_paths.append(res)
+
+                    if accept:
+                        opts: dict[str, object] = {"start_xy": start_xy, "goal_xy": goal_xy}
+                        reset_options_list.append(opts)
+                        if sample_pbar is not None:
+                            sample_pbar.update(1)
+
+                    attempts += 1
+                    if sample_pbar is not None and (attempts % 25 == 0):
+                        sample_pbar.set_postfix_str(f"attempts={attempts}")
+            finally:
+                if sample_pbar is not None:
+                    sample_pbar.close()
 
             if len(reset_options_list) < int(args.runs):
                 raise RuntimeError(
@@ -1270,6 +1303,25 @@ def main(argv: list[str] | None = None) -> int:
             if reset_options_list:
                 plot_start_xy = tuple(reset_options_list[plot_run_idx]["start_xy"])  # type: ignore[arg-type]
                 plot_goal_xy = tuple(reset_options_list[plot_run_idx]["goal_xy"])  # type: ignore[arg-type]
+
+        use_random_pairs = bool(getattr(args, "random_start_goal", False)) and bool(reset_options_list) and reset_options_list[0] is not None
+        env_pbar = None
+        if tqdm is not None:
+            total_rollouts = 0
+            if not bool(args.skip_rl):
+                total_rollouts += int(args.runs) * int(len(args.rl_algos))
+            if "hybrid_astar" in baselines:
+                total_rollouts += int(args.runs) if use_random_pairs else 1
+            if "rrt_star" in baselines:
+                total_rollouts += int(args.runs)
+            if total_rollouts > 0:
+                env_pbar = tqdm(
+                    total=int(total_rollouts),
+                    desc=f"Infer {env_label}",
+                    unit="rollout",
+                    dynamic_ncols=True,
+                    leave=True,
+                )
 
         meta_run_indices = sorted(path_run_indices)
         if not reset_options_list or reset_options_list[0] is None:
@@ -1430,6 +1482,9 @@ def main(argv: list[str] | None = None) -> int:
                     if bool(roll.reached):
                         algo_success += 1
                         algo_kpis.append(run_kpi)
+                    if env_pbar is not None:
+                        env_pbar.set_postfix_str(f"{pretty} run {int(i) + 1}/{int(args.runs)}")
+                        env_pbar.update(1)
 
                 k = mean_kpi(algo_kpis)
                 k_dict = dict(k.__dict__)
@@ -1460,8 +1515,6 @@ def main(argv: list[str] | None = None) -> int:
                 goal_xy_tol_m = float(cell_size_m) * 0.5
                 goal_theta_tol_rad = float(math.pi)
                 start_theta_rad = 0.0
-
-            use_random_pairs = bool(getattr(args, "random_start_goal", False)) and bool(reset_options_list) and reset_options_list[0] is not None
 
             def pair_for_run(i: int) -> tuple[tuple[int, int], tuple[int, int], dict[str, object] | None]:
                 if use_random_pairs and i < len(reset_options_list) and reset_options_list[i] is not None:
@@ -1560,6 +1613,9 @@ def main(argv: list[str] | None = None) -> int:
                     if bool(ha_reached) and ha_exec_path:
                         ha_success += 1
                         ha_kpis.append(run_kpi)
+                    if env_pbar is not None:
+                        env_pbar.set_postfix_str(f"Hybrid A* run {int(i) + 1}/{int(n_runs)}")
+                        env_pbar.update(1)
 
                 k = mean_kpi(ha_kpis)
                 k_dict = dict(k.__dict__)
@@ -1663,6 +1719,9 @@ def main(argv: list[str] | None = None) -> int:
                     if bool(reached) and exec_path:
                         rrt_success += 1
                         rrt_kpis.append(run_kpi)
+                    if env_pbar is not None:
+                        env_pbar.set_postfix_str(f"RRT* run {int(i) + 1}/{int(args.runs)}")
+                        env_pbar.update(1)
 
                 k = mean_kpi(rrt_kpis)
                 k_dict = dict(k.__dict__)
@@ -1680,6 +1739,9 @@ def main(argv: list[str] | None = None) -> int:
                         **k_dict,
                     }
                 )
+
+        if env_pbar is not None:
+            env_pbar.close()
         for run_idx, run_paths in env_paths_by_run.items():
             paths_for_plot[(env_name, int(run_idx))] = dict(run_paths)
 

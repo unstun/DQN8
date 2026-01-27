@@ -220,6 +220,8 @@ These affect the environment observation vector and therefore model checkpoint c
 - `--device` (default: `cuda`): Same as training.
 - `--cuda-device` (default: `0`): Same as training.
 - `--self-check` (default: off): Same as training.
+- `--progress` / `--no-progress` (default: auto): Show an inference progress bar.
+  - Default is on when running in a TTY (interactive terminal), otherwise off.
 - `--kpi-time-mode` (default: `rollout`): How `inference_time_s` is measured for RL rollouts.
   - `rollout`: full rollout wall-clock time (includes `env.step`)
   - `policy`: action-selection compute time only (Q forward + admissibility checks)
