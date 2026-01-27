@@ -34,7 +34,7 @@ from amr_dqn.baselines.pathplan import (
     plan_rrt_star,
     point_footprint,
 )
-from amr_dqn.env import AMRBicycleEnv, AMRGridEnv, RewardWeights, bicycle_integrate_one_step, wrap_angle_rad
+from amr_dqn.env import AMRBicycleEnv, AMRGridEnv, RewardWeights
 from amr_dqn.maps import FOREST_ENV_ORDER, get_map_spec
 from amr_dqn.metrics import KPI, avg_abs_curvature, max_corner_degree, num_path_corners, path_length
 from amr_dqn.smoothing import chaikin_smooth
@@ -208,180 +208,6 @@ def rollout_agent(
     )
 
 
-def rollout_tracked_path(
-    env: AMRBicycleEnv,
-    ref_path_xy_cells: list[tuple[float, float]],
-    *,
-    max_steps: int,
-    seed: int,
-    reset_options: dict[str, object] | None = None,
-    time_mode: str = "rollout",
-    lookahead_points: int = 5,
-    horizon_steps: int = 15,
-    w_target: float = 0.2,
-    w_heading: float = 0.2,
-    w_clearance: float = 0.8,
-    w_speed: float = 0.0,
-    collect_controls: bool = False,
-) -> RolloutResult:
-    time_mode = str(time_mode).lower().strip()
-    if time_mode not in {"rollout", "policy"}:
-        raise ValueError("time_mode must be one of: rollout, policy")
-
-    obs, _info0 = env.reset(seed=seed, options=reset_options)
-    path: list[tuple[float, float]] = [(float(env.start_xy[0]), float(env.start_xy[1]))]
-    dt_s = float(_env_dt_s(env))
-
-    t_series: list[float] | None = None
-    v_series: list[float] | None = None
-    delta_series: list[float] | None = None
-    if bool(collect_controls):
-        t_series = [0.0]
-        v_series = [float(getattr(env, "_v_m_s", 0.0))]
-        delta_series = [float(getattr(env, "_delta_rad", 0.0))]
-    if len(ref_path_xy_cells) < 2:
-        controls = None
-        if t_series is not None and v_series is not None and delta_series is not None:
-            controls = ControlTrace(
-                t_s=np.asarray(t_series, dtype=np.float64),
-                v_m_s=np.asarray(v_series, dtype=np.float64),
-                delta_rad=np.asarray(delta_series, dtype=np.float64),
-            )
-        return RolloutResult(
-            path_xy_cells=path,
-            compute_time_s=0.0,
-            reached=False,
-            steps=0,
-            path_time_s=0.0,
-            controls=controls,
-        )
-
-    def choose_action(progress_idx: int) -> tuple[int, int]:
-        x_cells = float(env._x_m) / float(env.cell_size_m)
-        y_cells = float(env._y_m) / float(env.cell_size_m)
-
-        # Find nearest reference-path index (windowed search around previous index).
-        start_i = max(0, int(progress_idx) - 25)
-        end_i = min(len(ref_path_xy_cells), int(progress_idx) + 250)
-        if end_i <= start_i:
-            start_i, end_i = 0, len(ref_path_xy_cells)
-        best_i = start_i
-        best_d2 = float("inf")
-        for i in range(start_i, end_i):
-            px, py = ref_path_xy_cells[i]
-            d2 = (float(px) - x_cells) ** 2 + (float(py) - y_cells) ** 2
-            if d2 < best_d2:
-                best_d2 = d2
-                best_i = i
-        progress_idx = int(best_i)
-
-        la = max(1, int(lookahead_points))
-        tgt_i = min(int(best_i) + la, len(ref_path_xy_cells) - 1)
-        tx_cells, ty_cells = ref_path_xy_cells[tgt_i]
-        tx_m = float(tx_cells) * float(env.cell_size_m)
-        ty_m = float(ty_cells) * float(env.cell_size_m)
-
-        h = max(1, int(horizon_steps))
-        best_score = -float("inf")
-        best_action: int | None = None
-
-        x0 = float(env._x_m)
-        y0 = float(env._y_m)
-        psi0 = float(env._psi_rad)
-        v0 = float(env._v_m_s)
-        delta0 = float(env._delta_rad)
-        v_max = float(env.model.v_max_m_s)
-
-        for a_id in range(int(env.action_table.shape[0])):
-            delta_dot = float(env.action_table[a_id, 0])
-            a = float(env.action_table[a_id, 1])
-
-            x, y, psi, v, delta = x0, y0, psi0, v0, delta0
-            min_od = float("inf")
-            ok = True
-            for _ in range(h):
-                x, y, psi, v, delta = bicycle_integrate_one_step(
-                    x_m=x,
-                    y_m=y,
-                    psi_rad=psi,
-                    v_m_s=v,
-                    delta_rad=delta,
-                    delta_dot_rad_s=delta_dot,
-                    a_m_s2=a,
-                    params=env.model,
-                )
-                od, coll = env._od_and_collision_at_pose_m(x, y, psi)
-                min_od = min(float(min_od), float(od))
-                if coll:
-                    ok = False
-                    break
-            if not ok:
-                continue
-
-            cost = float(env._cost_to_goal_pose_m(x, y, psi))
-            dist_tgt = float(math.hypot(float(tx_m) - float(x), float(ty_m) - float(y)))
-            tgt_heading = float(math.atan2(float(ty_m) - float(y), float(tx_m) - float(x)))
-            heading_err = wrap_angle_rad(float(tgt_heading) - float(psi))
-
-            score = -float(cost)
-            score += -float(w_target) * float(dist_tgt) - float(w_heading) * abs(float(heading_err))
-            score += float(w_clearance) * float(min_od)
-            if w_speed:
-                score += float(w_speed) * (float(v) / float(v_max))
-
-            if float(score) > float(best_score):
-                best_score = float(score)
-                best_action = int(a_id)
-
-        if best_action is None or not math.isfinite(best_score):
-            return int(env._fallback_action_short_rollout(horizon_steps=int(horizon_steps), min_od_m=0.0)), int(progress_idx)
-
-        return int(best_action), int(progress_idx)
-
-    inference_time_s = 0.0
-    t_rollout0 = time.perf_counter()
-    done = False
-    truncated = False
-    steps = 0
-    reached = False
-    progress_idx = 0
-    while not (done or truncated) and steps < max_steps:
-        steps += 1
-        t0 = time.perf_counter() if time_mode == "policy" else None
-        a, progress_idx = choose_action(progress_idx)
-        if t0 is not None:
-            inference_time_s += float(time.perf_counter() - t0)
-        obs, _, done, truncated, info = env.step(int(a))
-        x, y = info["agent_xy"]
-        path.append((float(x), float(y)))
-        if t_series is not None and v_series is not None and delta_series is not None:
-            t_series.append(float(steps) * dt_s)
-            v_series.append(float(info.get("v_m_s", float(getattr(env, "_v_m_s", 0.0)))))
-            delta_series.append(float(info.get("delta_rad", float(getattr(env, "_delta_rad", 0.0)))))
-        if info.get("reached"):
-            reached = True
-            break
-
-    if time_mode == "rollout":
-        inference_time_s = float(time.perf_counter() - t_rollout0)
-
-    controls = None
-    if t_series is not None and v_series is not None and delta_series is not None:
-        controls = ControlTrace(
-            t_s=np.asarray(t_series, dtype=np.float64),
-            v_m_s=np.asarray(v_series, dtype=np.float64),
-            delta_rad=np.asarray(delta_series, dtype=np.float64),
-        )
-    return RolloutResult(
-        path_xy_cells=path,
-        compute_time_s=float(inference_time_s),
-        reached=bool(reached),
-        steps=int(steps),
-        path_time_s=float(steps) * dt_s,
-        controls=controls,
-    )
-
-
 def rollout_tracked_path_mpc(
     env: AMRBicycleEnv,
     ref_path_xy_cells: list[tuple[float, float]],
@@ -460,6 +286,15 @@ def rollout_tracked_path_mpc(
             controls=controls,
         )
 
+    # Precompute reference arc-length (meters) for progress-based tracking.
+    ref_xy = np.asarray(ref_path_xy_cells, dtype=np.float64)
+    if ref_xy.shape[0] >= 2:
+        d = np.diff(ref_xy, axis=0)
+        ds = np.hypot(d[:, 0], d[:, 1]) * float(env.cell_size_m)
+        ref_s_m = np.concatenate([np.array([0.0], dtype=np.float64), np.cumsum(ds, dtype=np.float64)], axis=0)
+    else:
+        ref_s_m = np.zeros((ref_xy.shape[0],), dtype=np.float64)
+
     n = max(16, int(n_candidates))
     h = max(1, int(horizon_steps))
     la = max(1, int(lookahead_points))
@@ -485,9 +320,10 @@ def rollout_tracked_path_mpc(
             if d2 < best_d2:
                 best_d2 = d2
                 best_i = i
-        progress_idx = int(best_i)
+        # Monotonic progress avoids getting "stuck" on self-intersections / loops.
+        progress_idx = max(int(progress_idx), int(best_i))
 
-        tgt_i = min(int(best_i) + la, len(ref_path_xy_cells) - 1)
+        tgt_i = min(int(progress_idx) + la, len(ref_path_xy_cells) - 1)
         tx_cells, ty_cells = ref_path_xy_cells[tgt_i]
         tx_m = float(tx_cells) * float(env.cell_size_m)
         ty_m = float(ty_cells) * float(env.cell_size_m)
@@ -525,6 +361,24 @@ def rollout_tracked_path_mpc(
         score = -cost1
         score += -float(w_target) * dist_tgt - float(w_heading) * np.abs(heading_err)
         score += float(w_clearance) * min_od
+        # Progress reward: meters advanced along the reference arc-length.
+        if int(progress_idx) < int(ref_s_m.shape[0]):
+            start_s = float(ref_s_m[int(progress_idx)])
+            proj_start = int(progress_idx)
+            proj_end = min(len(ref_path_xy_cells), int(progress_idx) + 250)
+            if proj_end <= proj_start:
+                proj_start, proj_end = 0, len(ref_path_xy_cells)
+            window = ref_xy[int(proj_start) : int(proj_end)]
+            if window.shape[0] > 0:
+                x_pred_cells = x / float(env.cell_size_m)
+                y_pred_cells = y / float(env.cell_size_m)
+                dx = window[:, 0][None, :] - x_pred_cells[:, None]
+                dy = window[:, 1][None, :] - y_pred_cells[:, None]
+                nearest = np.argmin(dx * dx + dy * dy, axis=1)
+                nearest_idx = (int(proj_start) + nearest.astype(np.int32, copy=False)).astype(np.int32, copy=False)
+                nearest_idx = np.clip(nearest_idx, 0, int(ref_s_m.shape[0]) - 1)
+                progress_m = np.maximum(0.0, ref_s_m[nearest_idx] - float(start_s))
+                score += 1.0 * progress_m
         if float(w_speed) != 0.0 and float(v_max) > 1e-6:
             score += float(w_speed) * (v / float(v_max))
         if float(w_control) != 0.0:
@@ -946,27 +800,17 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     ap.add_argument(
-        "--forest-baseline-controller",
-        choices=("discrete", "mpc"),
-        default="discrete",
-        help=(
-            "Forest-only: controller used when --forest-baseline-rollout is enabled. "
-            "'discrete' enumerates the env action_table; "
-            "'mpc' samples continuous (delta_dot,a) and steps via AMRBicycleEnv.step_continuous()."
-        ),
-    )
-    ap.add_argument(
         "--forest-baseline-mpc-candidates",
         type=int,
         default=256,
-        help="Forest-only: continuous control samples per MPC step (when --forest-baseline-controller=mpc).",
+        help="Forest-only: continuous control samples per MPC step for baseline tracking.",
     )
     ap.add_argument(
         "--forest-baseline-save-traces",
         action=argparse.BooleanOptionalAction,
         default=False,
         help=(
-            "Forest-only: when --forest-baseline-controller=mpc is used, save per-run executed baseline trajectories "
+            "Forest-only: when --forest-baseline-rollout is enabled, save per-run executed baseline trajectories "
             "(x,y,theta,v,delta,controls,OD) under <run_dir>/traces/ as CSV."
         ),
     )
@@ -1068,7 +912,13 @@ def main(argv: list[str] | None = None) -> int:
     if config_path is not None:
         cfg_raw = load_json(Path(config_path))
         cfg = select_section(cfg_raw, section="infer")
-        apply_config_defaults(ap, cfg, strict=True)
+        if "forest_baseline_controller" in cfg:
+            print(
+                "Warning: config key 'forest_baseline_controller' is deprecated and ignored; "
+                "baseline rollouts always use MPC now.",
+                file=sys.stderr,
+            )
+        apply_config_defaults(ap, cfg, strict=True, allow_unknown_prefixes=("_", "forest_baseline_controller"))
 
     args = ap.parse_args(argv)
     if int(getattr(args, "plot_run_idx", 0)) < 0:
@@ -1652,44 +1502,26 @@ def main(argv: list[str] | None = None) -> int:
                     ha_track_time_s = 0.0
                     ha_path_time_s = float("nan")
                     if bool(res.success) and isinstance(env, AMRBicycleEnv) and bool(getattr(args, "forest_baseline_rollout", False)):
-                        controller = str(getattr(args, "forest_baseline_controller", "discrete")).lower().strip()
-                        if controller == "mpc":
-                            trace_path = None
-                            if bool(getattr(args, "forest_baseline_save_traces", False)):
-                                trace_path = out_dir / "traces" / f"{_safe_slug(env_case)}__Hybrid_A__run{int(i)}.csv"
-                            roll = rollout_tracked_path_mpc(
-                                env,
-                                ha_exec_path,
-                                max_steps=args.max_steps,
-                                seed=args.seed + 30_000 + i,
-                                reset_options=r_opts,
-                                time_mode=str(getattr(args, "kpi_time_mode", "policy")),
-                                trace_path=trace_path,
-                                n_candidates=int(getattr(args, "forest_baseline_mpc_candidates", 256)),
-                                collect_controls=bool(int(i) in control_run_indices),
-                            )
-                            ha_exec_path = list(roll.path_xy_cells)
-                            ha_track_time_s = float(roll.compute_time_s)
-                            ha_reached = bool(roll.reached)
-                            ha_path_time_s = float(roll.path_time_s)
-                            if int(i) in control_run_indices and roll.controls is not None:
-                                controls_for_plot.setdefault((env_name, int(i)), {})["Hybrid A*"] = roll.controls
-                        else:
-                            roll = rollout_tracked_path(
-                                env,
-                                ha_exec_path,
-                                max_steps=args.max_steps,
-                                seed=args.seed + 30_000 + i,
-                                reset_options=r_opts,
-                                time_mode=str(getattr(args, "kpi_time_mode", "policy")),
-                                collect_controls=bool(int(i) in control_run_indices),
-                            )
-                            ha_exec_path = list(roll.path_xy_cells)
-                            ha_track_time_s = float(roll.compute_time_s)
-                            ha_reached = bool(roll.reached)
-                            ha_path_time_s = float(roll.path_time_s)
-                            if int(i) in control_run_indices and roll.controls is not None:
-                                controls_for_plot.setdefault((env_name, int(i)), {})["Hybrid A*"] = roll.controls
+                        trace_path = None
+                        if bool(getattr(args, "forest_baseline_save_traces", False)):
+                            trace_path = out_dir / "traces" / f"{_safe_slug(env_case)}__Hybrid_A__run{int(i)}.csv"
+                        roll = rollout_tracked_path_mpc(
+                            env,
+                            ha_exec_path,
+                            max_steps=args.max_steps,
+                            seed=args.seed + 30_000 + i,
+                            reset_options=r_opts,
+                            time_mode=str(getattr(args, "kpi_time_mode", "policy")),
+                            trace_path=trace_path,
+                            n_candidates=int(getattr(args, "forest_baseline_mpc_candidates", 256)),
+                            collect_controls=bool(int(i) in control_run_indices),
+                        )
+                        ha_exec_path = list(roll.path_xy_cells)
+                        ha_track_time_s = float(roll.compute_time_s)
+                        ha_reached = bool(roll.reached)
+                        ha_path_time_s = float(roll.path_time_s)
+                        if int(i) in control_run_indices and roll.controls is not None:
+                            controls_for_plot.setdefault((env_name, int(i)), {})["Hybrid A*"] = roll.controls
 
                     ha_plan_times.append(float(res.time_s))
                     ha_track_times.append(float(ha_track_time_s))
@@ -1773,44 +1605,26 @@ def main(argv: list[str] | None = None) -> int:
                     track_time_s = 0.0
                     path_time_s = float("nan")
                     if bool(res.success) and isinstance(env, AMRBicycleEnv) and bool(getattr(args, "forest_baseline_rollout", False)):
-                        controller = str(getattr(args, "forest_baseline_controller", "discrete")).lower().strip()
-                        if controller == "mpc":
-                            trace_path = None
-                            if bool(getattr(args, "forest_baseline_save_traces", False)):
-                                trace_path = out_dir / "traces" / f"{_safe_slug(env_case)}__RRT__run{int(i)}.csv"
-                            roll = rollout_tracked_path_mpc(
-                                env,
-                                exec_path,
-                                max_steps=args.max_steps,
-                                seed=args.seed + 40_000 + i,
-                                reset_options=r_opts,
-                                time_mode=str(getattr(args, "kpi_time_mode", "policy")),
-                                trace_path=trace_path,
-                                n_candidates=int(getattr(args, "forest_baseline_mpc_candidates", 256)),
-                                collect_controls=bool(int(i) in control_run_indices),
-                            )
-                            exec_path = list(roll.path_xy_cells)
-                            track_time_s = float(roll.compute_time_s)
-                            reached = bool(roll.reached)
-                            path_time_s = float(roll.path_time_s)
-                            if int(i) in control_run_indices and roll.controls is not None:
-                                controls_for_plot.setdefault((env_name, int(i)), {})["RRT*"] = roll.controls
-                        else:
-                            roll = rollout_tracked_path(
-                                env,
-                                exec_path,
-                                max_steps=args.max_steps,
-                                seed=args.seed + 40_000 + i,
-                                reset_options=r_opts,
-                                time_mode=str(getattr(args, "kpi_time_mode", "policy")),
-                                collect_controls=bool(int(i) in control_run_indices),
-                            )
-                            exec_path = list(roll.path_xy_cells)
-                            track_time_s = float(roll.compute_time_s)
-                            reached = bool(roll.reached)
-                            path_time_s = float(roll.path_time_s)
-                            if int(i) in control_run_indices and roll.controls is not None:
-                                controls_for_plot.setdefault((env_name, int(i)), {})["RRT*"] = roll.controls
+                        trace_path = None
+                        if bool(getattr(args, "forest_baseline_save_traces", False)):
+                            trace_path = out_dir / "traces" / f"{_safe_slug(env_case)}__RRT__run{int(i)}.csv"
+                        roll = rollout_tracked_path_mpc(
+                            env,
+                            exec_path,
+                            max_steps=args.max_steps,
+                            seed=args.seed + 40_000 + i,
+                            reset_options=r_opts,
+                            time_mode=str(getattr(args, "kpi_time_mode", "policy")),
+                            trace_path=trace_path,
+                            n_candidates=int(getattr(args, "forest_baseline_mpc_candidates", 256)),
+                            collect_controls=bool(int(i) in control_run_indices),
+                        )
+                        exec_path = list(roll.path_xy_cells)
+                        track_time_s = float(roll.compute_time_s)
+                        reached = bool(roll.reached)
+                        path_time_s = float(roll.path_time_s)
+                        if int(i) in control_run_indices and roll.controls is not None:
+                            controls_for_plot.setdefault((env_name, int(i)), {})["RRT*"] = roll.controls
 
                     rrt_plan_times.append(float(res.time_s))
                     rrt_track_times.append(float(track_time_s))

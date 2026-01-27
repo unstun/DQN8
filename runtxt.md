@@ -233,9 +233,8 @@ These affect the environment observation vector and therefore model checkpoint c
 - `--hybrid-max-nodes` (default: `200000`): Hybrid A* node budget.
 - `--rrt-max-iter` (default: `5000`): RRT* iteration budget.
 - `--forest-baseline-rollout` (default: enabled): Forest-only; roll out a baseline tracking controller on planned paths and include tracking compute in `inference_time_s` (disable with `--no-forest-baseline-rollout`).
-  - `--forest-baseline-controller` (default: `discrete`): `discrete` enumerates the env action table; `mpc` samples continuous controls and steps via `AMRBicycleEnv.step_continuous()`.
-  - `--forest-baseline-mpc-candidates` (default: `256`): MPC samples per control step (when controller is `mpc`).
-  - `--forest-baseline-save-traces` (default: disabled): Save per-run executed baseline trajectories to `<run_dir>/traces/*.csv` (forest-only, MPC controller).
+  - `--forest-baseline-mpc-candidates` (default: `256`): MPC samples per control step.
+  - `--forest-baseline-save-traces` (default: disabled): Save per-run executed baseline trajectories to `<run_dir>/traces/*.csv` (forest-only).
 
 ---
 

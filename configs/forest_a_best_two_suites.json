@@ -15,7 +15,6 @@
       "all"
     ],
     "forest_baseline_rollout": true,
-    "forest_baseline_controller": "mpc",
     "forest_baseline_mpc_candidates": 256,
     "forest_baseline_save_traces": true,
     "random_start_goal": true,

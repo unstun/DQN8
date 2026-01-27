@@ -146,33 +146,62 @@ def plan_rrt_star(
     start = AckermannState(float(start_xy[0]) * cell_size_m, float(start_xy[1]) * cell_size_m, st)
     goal = AckermannState(float(goal_xy[0]) * cell_size_m, float(goal_xy[1]) * cell_size_m, float(goal_theta_rad))
 
-    planner = RRTStarPlanner(
-        grid_map,
-        footprint,
-        params,
-        rng_seed=int(seed),
-        goal_xy_tol=float(goal_xy_tol_m),
-        goal_theta_tol=float(goal_theta_tol_rad),
-    )
+    # RRT* is stochastic; for tight per-run budgets we do a few restarts with different RNG
+    # seeds. We intentionally keep planner hyperparameters at their library defaults because
+    # they were tuned together; changing them can *reduce* success in some scenes.
+    base_seed = int(seed)
+    max_restarts = 2  # total attempts = 1 + max_restarts
+    # Allocate most budget to the first attempt, but keep a small reserve for retries.
+    time_fracs = (0.85, 0.10, 0.05)
+    iter_fracs = (0.85, 0.10, 0.05)
 
-    t0 = time.perf_counter()
-    path, stats = planner.plan(
-        start,
-        goal,
-        timeout=float(timeout_s),
-        max_iter=int(max_iter),
-        self_check=False,
-    )
-    t1 = time.perf_counter()
-    dt = float(stats.get("time", t1 - t0))
+    start_time = time.perf_counter()
+    last_stats: dict[str, Any] = {}
+    for attempt in range(1 + int(max_restarts)):
+        remaining_time = float(timeout_s) - float(time.perf_counter() - start_time)
+        if remaining_time <= 0.0:
+            break
+        if int(max_iter) <= 0:
+            break
 
-    success = bool(stats.get("success", bool(path)))
-    if path:
-        pts = [(float(s.x) / cell_size_m, float(s.y) / cell_size_m) for s in path]
-        return PlannerResult(path_xy_cells=pts, time_s=dt, success=success, stats=stats)
+        attempt_timeout = min(float(remaining_time), float(timeout_s) * float(time_fracs[int(attempt)]))
+        attempt_max_iter = max(1, int(round(float(max_iter) * float(iter_fracs[int(attempt)]))))
+
+        planner = RRTStarPlanner(
+            grid_map,
+            footprint,
+            params,
+            rng_seed=base_seed + 1_000_003 * int(attempt),
+            goal_xy_tol=float(goal_xy_tol_m),
+            goal_theta_tol=float(goal_theta_tol_rad),
+        )
+
+        path, stats = planner.plan(
+            start,
+            goal,
+            timeout=float(attempt_timeout),
+            max_iter=int(attempt_max_iter),
+            self_check=False,
+        )
+        last_stats = dict(stats)
+        last_stats["attempt"] = int(attempt) + 1
+        last_stats["attempt_seed"] = base_seed + 1_000_003 * int(attempt)
+        last_stats["attempt_timeout_s"] = float(attempt_timeout)
+        last_stats["attempt_max_iter"] = int(attempt_max_iter)
+
+        success = bool(stats.get("success", bool(path)))
+        if success and path:
+            pts = [(float(s.x) / cell_size_m, float(s.y) / cell_size_m) for s in path]
+            return PlannerResult(
+                path_xy_cells=pts,
+                time_s=float(time.perf_counter() - start_time),
+                success=True,
+                stats=last_stats,
+            )
+
     return PlannerResult(
         path_xy_cells=[(float(start_xy[0]), float(start_xy[1]))],
-        time_s=dt,
+        time_s=float(time.perf_counter() - start_time),
         success=False,
-        stats=stats,
+        stats=last_stats,
     )
