@@ -8,6 +8,7 @@ import time
 from dataclasses import asdict, replace
 from pathlib import Path
 
+from amr_dqn.reward_norm import RunningRewardNormalizer
 from amr_dqn.runtime import configure_runtime, select_device, torch_runtime_info
 from amr_dqn.runs import create_run_dir, resolve_experiment_dir
 
@@ -353,6 +354,7 @@ def train_one(
     progress: bool,
     device: torch.device,
     reward_clip: float = 0.0,
+    reward_norm: bool = True,
 ) -> tuple[DQNFamilyAgent, np.ndarray, list[dict[str, float | int]], list[dict[str, float]]]:
     obs_dim = int(env.observation_space.shape[0])
     n_actions = int(env.action_space.n)
@@ -362,6 +364,7 @@ def train_one(
     global_step = 0
     eval_history: list[dict[str, float | int]] = []
     diag_history: list[dict[str, float]] = []
+    rew_normalizer = RunningRewardNormalizer(clip=float(reward_clip)) if bool(reward_norm) else None
 
     best_score: tuple[int, int, int] = (-1, -10**18, 0)
     best_q: dict[str, torch.Tensor] | None = None
@@ -436,10 +439,14 @@ def train_one(
             obs_buf, act_buf, rew_buf, next_obs_buf, next_mask_buf, done_buf, trunc_buf = forest_demo_data
             n = int(min(int(demo_target), int(obs_buf.shape[0])))
             for i in range(n):
+                r_i = float(rew_buf[i])
+                if rew_normalizer is not None:
+                    rew_normalizer.update(r_i)
+                    r_i = rew_normalizer.normalize(r_i)
                 agent.observe(
                     obs_buf[i],
                     int(act_buf[i]),
-                    float(rew_buf[i]),
+                    r_i,
                     next_obs_buf[i],
                     bool(done_buf[i] > 0.5),
                     demo=True,
@@ -484,10 +491,14 @@ def train_one(
                     obs = next_obs
                 if bool(reached):
                     for o, a, r, no, d, tr, nm in ep:
+                        r_norm = float(r)
+                        if rew_normalizer is not None:
+                            rew_normalizer.update(r_norm)
+                            r_norm = rew_normalizer.normalize(r_norm)
                         agent.observe(
                             o,
                             int(a),
-                            float(r),
+                            r_norm,
                             no,
                             bool(d),
                             demo=True,
@@ -715,8 +726,11 @@ def train_one(
             # Time-limit truncation should not be treated as terminal for bootstrapping.
             # Only mark expert transitions as demos when the *episode* reaches the goal.
             # Failed expert steps are still useful off-policy data, but should not be imitated/preserved.
-            # Reward clipping (ablation: test if reward scale causes Q-value explosion).
-            if reward_clip > 0.0:
+            # Reward normalization (V8) or hard clipping (V6 fallback).
+            if rew_normalizer is not None:
+                rew_normalizer.update(float(reward))
+                reward = rew_normalizer.normalize(float(reward))
+            elif reward_clip > 0.0:
                 reward = float(np.clip(float(reward), -reward_clip, reward_clip))
             ep_buffer.append(
                 (
@@ -773,6 +787,10 @@ def train_one(
             ep_diag["q_max"] = float(np.max(q_np))
             ep_diag["q_min"] = float(np.min(q_np))
             ep_diag["q_spread"] = float(np.max(q_np) - np.min(q_np))
+        if rew_normalizer is not None:
+            ep_diag["rew_norm_mean"] = float(rew_normalizer._mean)
+            ep_diag["rew_norm_std"] = float(rew_normalizer.std)
+            ep_diag["rew_norm_count"] = int(rew_normalizer._count)
         diag_history.append(ep_diag)
 
         every = int(max(0, int(eval_every)))
@@ -1153,6 +1171,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Clip per-step rewards to [-v, +v] before storing in replay (0 disables).",
     )
     ap.add_argument(
+        "--reward-norm",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Enable running-mean/std reward normalization (V8). Clip is used as safety net.",
+    )
+    ap.add_argument(
         "--progress",
         action=argparse.BooleanOptionalAction,
         default=None,
@@ -1396,6 +1420,7 @@ def main(argv: list[str] | None = None) -> int:
                 progress=progress,
                 device=device,
                 reward_clip=float(reward_clip),
+                reward_norm=bool(args.reward_norm),
             )
             env_curves[str(algo)] = algo_returns
             env_eval_rows[str(algo)] = list(algo_eval)
