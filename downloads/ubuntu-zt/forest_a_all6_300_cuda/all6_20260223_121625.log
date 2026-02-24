@@ -1,0 +1,35 @@
+Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.
+Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.
+Users of this version of Gym should be able to simply replace 'import gym' with 'import gymnasium as gym' in the vast majority of cases.
+See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.
+
+Wrote: runs/forest_a_all6_300_cuda/train_20260223_121627/fig13_rewards.png
+Wrote: runs/forest_a_all6_300_cuda/train_20260223_121627/training_returns.csv
+Wrote models under: runs/forest_a_all6_300_cuda/train_20260223_121627/models
+Run dir: runs/forest_a_all6_300_cuda/train_20260223_121627
+
+Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.
+Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.
+Users of this version of Gym should be able to simply replace 'import gym' with 'import gymnasium as gym' in the vast majority of cases.
+See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.
+
+Wrote: runs/forest_a_all6_300_cuda/train_20260223_121627/infer/20260223_122937/fig12_paths.png
+Wrote: runs/forest_a_all6_300_cuda/train_20260223_121627/infer/20260223_122937/fig13_controls.png
+Wrote: runs/forest_a_all6_300_cuda/train_20260223_121627/infer/20260223_122937/fig12_paths_forest_a_run_00.png
+Wrote: runs/forest_a_all6_300_cuda/train_20260223_121627/infer/20260223_122937/fig12_paths_forest_a_run_01.png
+Wrote: runs/forest_a_all6_300_cuda/train_20260223_121627/infer/20260223_122937/fig12_paths_forest_a_run_02.png
+Wrote: runs/forest_a_all6_300_cuda/train_20260223_121627/infer/20260223_122937/fig12_paths_forest_a_run_03.png
+Wrote: runs/forest_a_all6_300_cuda/train_20260223_121627/infer/20260223_122937/fig12_paths_forest_a_run_04.png
+Wrote: runs/forest_a_all6_300_cuda/train_20260223_121627/infer/20260223_122937/fig12_paths_forest_a_run_05.png
+Wrote: runs/forest_a_all6_300_cuda/train_20260223_121627/infer/20260223_122937/fig12_paths_forest_a_run_06.png
+Wrote: runs/forest_a_all6_300_cuda/train_20260223_121627/infer/20260223_122937/fig12_paths_forest_a_run_07.png
+Wrote: runs/forest_a_all6_300_cuda/train_20260223_121627/infer/20260223_122937/fig12_paths_forest_a_run_08.png
+Wrote: runs/forest_a_all6_300_cuda/train_20260223_121627/infer/20260223_122937/fig12_paths_forest_a_run_09.png
+Wrote: runs/forest_a_all6_300_cuda/train_20260223_121627/infer/20260223_122937/table2_kpis.csv
+Wrote: runs/forest_a_all6_300_cuda/train_20260223_121627/infer/20260223_122937/table2_kpis_raw.csv
+Wrote: runs/forest_a_all6_300_cuda/train_20260223_121627/infer/20260223_122937/table2_kpis.md
+Wrote: runs/forest_a_all6_300_cuda/train_20260223_121627/infer/20260223_122937/table2_kpis_mean.csv
+Wrote: runs/forest_a_all6_300_cuda/train_20260223_121627/infer/20260223_122937/table2_kpis_mean_raw.csv
+Wrote: runs/forest_a_all6_300_cuda/train_20260223_121627/infer/20260223_122937/table2_kpis_mean.md
+Run dir: runs/forest_a_all6_300_cuda/train_20260223_121627/infer/20260223_122937
+

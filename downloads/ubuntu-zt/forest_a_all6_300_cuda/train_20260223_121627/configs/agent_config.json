@@ -1,0 +1,18 @@
+{
+  "batch_size": 128,
+  "demo_ce_lambda": 1.0,
+  "demo_lambda": 1.0,
+  "demo_margin": 0.8,
+  "eps_decay": 2000,
+  "eps_final": 0.01,
+  "eps_start": 0.9,
+  "gamma": 0.995,
+  "grad_clip_norm": 10.0,
+  "hidden_dim": 256,
+  "hidden_layers": 3,
+  "learning_rate": 0.0005,
+  "n_step": 1,
+  "replay_capacity": 100000,
+  "target_update_steps": 1000,
+  "target_update_tau": 0.0
+}

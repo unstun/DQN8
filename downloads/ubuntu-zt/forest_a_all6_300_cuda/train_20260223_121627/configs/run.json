@@ -1,0 +1,72 @@
+{
+  "args": {
+    "cell_size": 1.0,
+    "config": null,
+    "cuda_device": 0,
+    "curriculum_band_m": 2.0,
+    "curriculum_ramp": 0.35,
+    "device": "cuda",
+    "envs": [
+      "forest_a"
+    ],
+    "episodes": 300,
+    "eval_every": 0,
+    "eval_runs": 5,
+    "eval_score_time_weight": 0.5,
+    "forest_action_shield": true,
+    "forest_curriculum": true,
+    "forest_demo_horizon": 15,
+    "forest_demo_prefill": true,
+    "forest_demo_pretrain_steps": 40000,
+    "forest_demo_w_clearance": 0.8,
+    "forest_expert": "auto",
+    "forest_expert_exploration": true,
+    "forest_expert_prob_decay": 0.6,
+    "forest_expert_prob_final": 0.0,
+    "forest_expert_prob_start": 0.7,
+    "forest_rand_fixed_prob": 0.0,
+    "forest_rand_max_cost_m": 0.0,
+    "forest_rand_min_cost_m": 6.0,
+    "forest_rand_tries": 200,
+    "forest_random_start_goal": true,
+    "learning_starts": 5000,
+    "ma_window": 20,
+    "max_steps": 600,
+    "n_sectors": 36,
+    "obs_map_size": 12,
+    "out": "forest_a_all6_300_cuda",
+    "profile": "forest_a_all6_300_cuda",
+    "progress": false,
+    "rl_algos": [
+      "mlp-dqn",
+      "mlp-ddqn",
+      "mlp-pddqn",
+      "cnn-dqn",
+      "cnn-ddqn",
+      "cnn-pddqn"
+    ],
+    "runs_root": "runs",
+    "seed": 0,
+    "self_check": false,
+    "sensor_range": 6,
+    "timestamp_runs": true,
+    "train_freq": 4
+  },
+  "argv": [
+    "train.py",
+    "--profile",
+    "forest_a_all6_300_cuda"
+  ],
+  "experiment_dir": "runs/forest_a_all6_300_cuda",
+  "kind": "train",
+  "run_dir": "runs/forest_a_all6_300_cuda/train_20260223_121627",
+  "torch": {
+    "cuda_available": true,
+    "device_count": 1,
+    "device_names": [
+      "NVIDIA GeForce RTX 5070 Ti"
+    ],
+    "torch_cuda_version": "12.8",
+    "torch_version": "2.10.0+cu128"
+  }
+}

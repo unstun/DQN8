@@ -1,0 +1,29 @@
+{
+  "_comment": "Ablation: lr=1e-4 (vs baseline 5e-4). Test if learning rate is too aggressive.",
+  "train": {
+    "envs": ["forest_a"],
+    "out": "ablation_lr",
+    "rl_algos": ["mlp-dqn", "cnn-dqn"],
+    "episodes": 150,
+    "max_steps": 600,
+    "learning_rate": 0.0001,
+    "forest_random_start_goal": true,
+    "forest_rand_min_cost_m": 6.0,
+    "forest_rand_fixed_prob": 0.0,
+    "forest_rand_tries": 200,
+    "forest_expert": "auto",
+    "forest_demo_prefill": true,
+    "forest_demo_pretrain_steps": 40000,
+    "forest_expert_exploration": true,
+    "forest_action_shield": true,
+    "forest_expert_prob_decay": 0.85,
+    "eps_decay": 250,
+    "learning_starts": 5000,
+    "eval_every": 10,
+    "eval_runs": 5,
+    "device": "cuda",
+    "cuda_device": 0,
+    "seed": 0,
+    "progress": false
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "_comment": "Repro record: V5 double training episodes for convergence",
+  "date": "2026-02-23",
+  "topic": "v5_600ep_convergence",
+  "version": "V5",
+  "seed": 0,
+  "profile": "forest_a_all6_600_cuda_v5",
+  "command_train": "conda run --cwd /home/sun/phdproject/dqn/DQN6 -n ros2py310 python train.py --profile forest_a_all6_600_cuda_v5",
+  "command_infer": "conda run --cwd /home/sun/phdproject/dqn/DQN6 -n ros2py310 python infer.py --profile forest_a_all6_600_cuda_v5",
+  "changes": {
+    "configs/forest_a_all6_600_cuda_v5.json": "New V5 profile: episodes 300->600, eps_decay 250->500. Proportional scaling to allow convergence."
+  },
+  "key_hyperparams": {
+    "eps_decay": 500,
+    "eps_start": 0.6,
+    "eps_final": 0.01,
+    "forest_expert_prob_start": 0.7,
+    "forest_expert_prob_final": 0.0,
+    "forest_expert_prob_decay": 0.85,
+    "episodes": 600,
+    "learning_starts": 5000,
+    "forest_demo_pretrain_steps": 40000
+  },
+  "rationale": "V4 (300ep) reward curve declined throughout training. Analysis showed agent failure rate was 42-56% in last 50 pure-exploitation episodes (ep 251-300), indicating insufficient training time. Expert removed at ep ~255, leaving only 45 episodes for pure policy learning. V5 doubles to 600ep with proportional eps_decay=500, giving 91 pure-exploitation episodes and 2x total learning experience.",
+  "baseline": "forest_a_all6_300_cuda_v4 train_20260223_165433"
+}

@@ -1,0 +1,15 @@
+{
+  "_comment": "Repro: V4 + eval_every=10 to produce greedy-eval curves for paper (training_eval_metrics.png). Usage: conda run --cwd /home/sun/phdproject/dqn/DQN6 -n ros2py310 python train.py --profile forest_a_all6_300_cuda_v4_evalcurve",
+  "command": "conda run --cwd /home/sun/phdproject/dqn/DQN6 -n ros2py310 python train.py --profile forest_a_all6_300_cuda_v4_evalcurve",
+  "seed": 0,
+  "key_hyperparams": {
+    "episodes": 300,
+    "eps_decay": 250,
+    "forest_expert_prob_decay": 0.85,
+    "eval_every": 10,
+    "eval_runs": 5,
+    "forest_action_shield": true,
+    "forest_demo_pretrain_steps": 40000
+  },
+  "changes_from_v4": "Added eval_every=10 and eval_runs=5 to record greedy-eval metrics every 10 episodes; produces training_eval_metrics.png for paper."
+}

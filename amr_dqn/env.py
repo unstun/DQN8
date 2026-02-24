@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import cv2
-import gym
+import gymnasium as gym
 import numpy as np
 
 from amr_dqn.maps import MapSpec

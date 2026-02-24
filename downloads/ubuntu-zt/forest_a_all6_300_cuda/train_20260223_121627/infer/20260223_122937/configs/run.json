@@ -1,0 +1,85 @@
+{
+  "args": {
+    "baseline_timeout": 5.0,
+    "baselines": [
+      "all"
+    ],
+    "cell_size": 1.0,
+    "composite_w_avg_curvature": 1.0,
+    "composite_w_path_time": 1.0,
+    "composite_w_planning_time": 1.0,
+    "config": null,
+    "cuda_device": 0,
+    "device": "cuda",
+    "envs": [
+      "forest_a::short",
+      "forest_a::long"
+    ],
+    "forest_adm_horizon": 15,
+    "forest_baseline_mpc_candidates": 256,
+    "forest_baseline_rollout": true,
+    "forest_baseline_save_traces": false,
+    "forest_min_od_m": 0.0,
+    "forest_min_progress_m": 0.0001,
+    "forest_topk": 10,
+    "hybrid_max_nodes": 200000,
+    "kpi_time_mode": "policy",
+    "max_steps": 600,
+    "models": "forest_a_all6_300_cuda",
+    "n_sectors": 36,
+    "obs_map_size": 12,
+    "out": "forest_a_all6_300_cuda",
+    "plot_pair_runs": true,
+    "plot_pair_runs_max": 10,
+    "plot_run_idx": 0,
+    "profile": "forest_a_all6_300_cuda",
+    "progress": null,
+    "rand_fixed_prob": 0.0,
+    "rand_long_max_cost_m": 0.0,
+    "rand_long_min_cost_m": 42.0,
+    "rand_max_cost_m": 0.0,
+    "rand_min_cost_m": 6.0,
+    "rand_reject_max_attempts": 5000,
+    "rand_reject_unreachable": true,
+    "rand_short_max_cost_m": 14.0,
+    "rand_short_min_cost_m": 6.0,
+    "rand_tries": 400,
+    "rand_two_suites": true,
+    "random_start_goal": true,
+    "rl_algos": [
+      "mlp-dqn",
+      "mlp-ddqn",
+      "mlp-pddqn",
+      "cnn-dqn",
+      "cnn-ddqn",
+      "cnn-pddqn"
+    ],
+    "rrt_max_iter": 5000,
+    "runs": 10,
+    "runs_root": "runs",
+    "score_time_weight": 0.5,
+    "seed": 0,
+    "self_check": false,
+    "sensor_range": 6,
+    "skip_rl": false,
+    "timestamp_runs": true
+  },
+  "argv": [
+    "infer.py",
+    "--profile",
+    "forest_a_all6_300_cuda"
+  ],
+  "experiment_dir": "runs/forest_a_all6_300_cuda/train_20260223_121627/infer",
+  "kind": "infer",
+  "models_dir": "runs/forest_a_all6_300_cuda/train_20260223_121627/models",
+  "run_dir": "runs/forest_a_all6_300_cuda/train_20260223_121627/infer/20260223_122937",
+  "torch": {
+    "cuda_available": true,
+    "device_count": 1,
+    "device_names": [
+      "NVIDIA GeForce RTX 5070 Ti"
+    ],
+    "torch_cuda_version": "12.8",
+    "torch_version": "2.10.0+cu128"
+  }
+}

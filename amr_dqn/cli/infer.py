@@ -19,7 +19,7 @@ configure_runtime()
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.ticker as mticker
-import gym
+import gymnasium as gym
 import numpy as np
 import pandas as pd
 import torch
@@ -132,7 +132,7 @@ def rollout_agent(
             # Optionally, tie-break top-k actions using a lightweight Hybrid A* reference tracker
             # (precomputed path; no online planning during inference).
             with torch.no_grad():
-                x = torch.from_numpy(obs.astype(np.float32, copy=False)).to(agent.device)
+                x = torch.from_numpy(agent._prep_obs(obs)).to(agent.device)
                 q = agent.q(x.unsqueeze(0)).squeeze(0)
 
             a0 = int(torch.argmax(q).item())
@@ -1396,18 +1396,11 @@ def main(argv: list[str] | None = None) -> int:
                     "Point --models at a training run (or an experiment name/dir with a latest run)."
                 )
 
-            ckpt_obs_dim = infer_checkpoint_obs_dim(next(iter(algo_paths.values())))
-            for path in algo_paths.values():
-                if infer_checkpoint_obs_dim(path) != ckpt_obs_dim:
-                    raise RuntimeError(f"Observation dim mismatch between checkpoints under: {models_dir / env_base}")
-
+            # Each arch (MLP / CNN) may have a different effective obs_dim
+            # (MLP strips the EDT channel). The agent constructor and load()
+            # handle this automatically, so we just pass env_obs_dim.
             obs_dim = env_obs_dim
             obs_transform = None
-            if ckpt_obs_dim != env_obs_dim:
-                raise RuntimeError(
-                    f"Checkpoint expects obs_dim={ckpt_obs_dim} but env provides obs_dim={env_obs_dim} for {env_base!r}. "
-                    "Re-train models to match the environment observation space."
-                )
 
             agents: dict[str, DQNFamilyAgent] = {}
             for algo, path in algo_paths.items():

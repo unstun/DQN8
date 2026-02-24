@@ -14,7 +14,7 @@ from amr_dqn.runs import create_run_dir, resolve_experiment_dir
 configure_runtime()
 
 import matplotlib.pyplot as plt
-import gym
+import gymnasium as gym
 import numpy as np
 import pandas as pd
 import torch
@@ -110,6 +110,72 @@ def plot_training_eval_metrics(df_eval: pd.DataFrame, *, out_path: Path) -> None
     if handles:
         fig.legend(handles, labels, loc="upper center", ncol=min(4, len(labels)), fontsize=9, frameon=False)
     fig.suptitle("Training greedy-eval metrics", y=0.98)
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    fig.savefig(out_path, dpi=200)
+    plt.close(fig)
+
+
+def plot_training_diagnostics(df_diag: pd.DataFrame, *, out_path: Path) -> None:
+    """Plot loss curves, epsilon schedule, and Q-value spread."""
+    if df_diag.empty:
+        return
+
+    envs = [str(x) for x in df_diag["env"].drop_duplicates().tolist()]
+    if not envs:
+        return
+
+    algo_label = {
+        "mlp-dqn": "MLP-DQN", "mlp-ddqn": "MLP-DDQN", "mlp-pddqn": "MLP-PDDQN",
+        "cnn-dqn": "CNN-DQN", "cnn-ddqn": "CNN-DDQN", "cnn-pddqn": "CNN-PDDQN",
+    }
+    present = [str(x) for x in df_diag["algo"].dropna().drop_duplicates().tolist()]
+    pref = ("mlp-dqn", "mlp-ddqn", "mlp-pddqn", "cnn-dqn", "cnn-ddqn", "cnn-pddqn")
+    ordered = [a for a in pref if a in present] + [a for a in present if a not in pref]
+    algo_defs = [(a, algo_label.get(a, a.upper())) for a in ordered]
+
+    metrics: list[tuple[str, str]] = [
+        ("loss", "Total loss"),
+        ("td_loss", "TD loss"),
+        ("epsilon", "Epsilon"),
+        ("q_spread", "Q spread (max-min)"),
+        ("q_mean", "Q mean"),
+        ("q_std", "Q std"),
+    ]
+
+    rows_n = len(envs)
+    cols_n = len(metrics)
+    fig, axes = plt.subplots(
+        rows_n, cols_n,
+        figsize=(3.8 * cols_n, 2.8 * rows_n),
+        sharex=False, sharey=False,
+    )
+    axes_arr = np.atleast_2d(axes)
+
+    for i, env_name in enumerate(envs):
+        for j, (col, title) in enumerate(metrics):
+            ax = axes_arr[i, j]
+            for algo, label in algo_defs:
+                sub = df_diag[(df_diag["env"] == env_name) & (df_diag["algo"] == algo)].copy()
+                if sub.empty or col not in sub.columns:
+                    continue
+                sub = sub.sort_values("episode")
+                x = sub["episode"].to_numpy()
+                y = pd.to_numeric(sub[col], errors="coerce").astype(float).to_numpy()
+                y = np.where(np.isfinite(y), y, np.nan)
+                ax.plot(x, y, label=label, linewidth=0.8, alpha=0.85)
+            if i == 0:
+                ax.set_title(title, fontsize=9)
+            if j == 0:
+                ax.set_ylabel(str(env_name), fontsize=8)
+            if i == rows_n - 1:
+                ax.set_xlabel("Episode", fontsize=8)
+            ax.grid(True, alpha=0.25)
+            ax.tick_params(labelsize=7)
+
+    handles, labels = axes_arr[0, 0].get_legend_handles_labels()
+    if handles:
+        fig.legend(handles, labels, loc="upper center", ncol=min(6, len(labels)), fontsize=8, frameon=False)
+    fig.suptitle("Training diagnostics: loss / epsilon / Q-value", y=0.99, fontsize=11)
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     fig.savefig(out_path, dpi=200)
     plt.close(fig)
@@ -287,7 +353,8 @@ def train_one(
     eval_score_time_weight: float,
     progress: bool,
     device: torch.device,
-) -> tuple[DQNFamilyAgent, np.ndarray, list[dict[str, float | int]]]:
+    reward_clip: float = 0.0,
+) -> tuple[DQNFamilyAgent, np.ndarray, list[dict[str, float | int]], list[dict[str, float]]]:
     obs_dim = int(env.observation_space.shape[0])
     n_actions = int(env.action_space.n)
     agent = DQNFamilyAgent(algo, obs_dim, n_actions, config=agent_cfg, seed=seed, device=device)
@@ -295,6 +362,7 @@ def train_one(
     returns = np.zeros((episodes,), dtype=np.float32)
     global_step = 0
     eval_history: list[dict[str, float | int]] = []
+    diag_history: list[dict[str, float]] = []
 
     best_score: tuple[int, int, int] = (-1, -10**18, 0)
     best_q: dict[str, torch.Tensor] | None = None
@@ -691,6 +759,9 @@ def train_one(
             # Time-limit truncation should not be treated as terminal for bootstrapping.
             # Only mark expert transitions as demos when the *episode* reaches the goal.
             # Failed expert steps are still useful off-policy data, but should not be imitated/preserved.
+            # Reward clipping (ablation: test if reward scale causes Q-value explosion).
+            if reward_clip > 0.0:
+                reward = float(np.clip(float(reward), -reward_clip, reward_clip))
             ep_buffer.append(
                 (
                     obs,
@@ -722,10 +793,31 @@ def train_one(
                 truncated=bool(tr),
                 next_action_mask=nm,
             )
+        ep_losses: list[dict[str, float]] = []
         for _ in range(int(pending_updates)):
-            agent.update()
+            loss_info = agent.update()
+            if loss_info:
+                ep_losses.append(loss_info)
 
         returns[ep] = float(ep_return)
+
+        # --- diagnostics: loss, epsilon, Q-value spread ---
+        ep_diag: dict[str, float] = {"episode": float(ep + 1), "epsilon": float(agent.epsilon(ep))}
+        if ep_losses:
+            for k in ("loss", "td_loss", "margin_loss", "ce_loss"):
+                vals = [d[k] for d in ep_losses if k in d]
+                ep_diag[k] = float(np.mean(vals)) if vals else 0.0
+        # Q-value distribution: forward pass on current obs (cheap, single sample)
+        with torch.no_grad():
+            obs_diag = agent._prep_obs(obs)
+            q_vals = agent.q(torch.from_numpy(obs_diag).unsqueeze(0).to(agent.device)).squeeze(0)
+            q_np = q_vals.cpu().numpy()
+            ep_diag["q_mean"] = float(np.mean(q_np))
+            ep_diag["q_std"] = float(np.std(q_np))
+            ep_diag["q_max"] = float(np.max(q_np))
+            ep_diag["q_min"] = float(np.min(q_np))
+            ep_diag["q_spread"] = float(np.max(q_np) - np.min(q_np))
+        diag_history.append(ep_diag)
 
         every = int(max(0, int(eval_every)))
         if every > 0 and ((ep + 1) % every == 0 or ep == 0 or ep == int(episodes - 1)):
@@ -864,7 +956,7 @@ def train_one(
 
     model_path = out_dir / "models" / env.map_spec.name / f"{agent.algo}.pt"
     agent.save(model_path)
-    return agent, returns, eval_history
+    return agent, returns, eval_history, diag_history
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1085,6 +1177,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Forest-only: decay fraction (0<d<=1) for expert exploration probability.",
     )
     ap.add_argument(
+        "--eps-decay",
+        type=int,
+        default=None,
+        help="Override AgentConfig.eps_decay (epsilon-greedy decay episodes). Default: AgentConfig default (2000).",
+    )
+    ap.add_argument("--gamma", type=float, default=None, help="Override AgentConfig.gamma (discount factor).")
+    ap.add_argument("--learning-rate", type=float, default=None, help="Override AgentConfig.learning_rate.")
+    ap.add_argument(
+        "--target-update-tau",
+        type=float,
+        default=None,
+        help="Override AgentConfig.target_update_tau for ALL algos (>0 forces Polyak soft updates).",
+    )
+    ap.add_argument(
+        "--reward-clip",
+        type=float,
+        default=0.0,
+        help="Clip per-step rewards to [-v, +v] before storing in replay (0 disables).",
+    )
+    ap.add_argument(
         "--progress",
         action=argparse.BooleanOptionalAction,
         default=None,
@@ -1168,10 +1280,24 @@ def main(argv: list[str] | None = None) -> int:
     run_paths = create_run_dir(experiment_dir, timestamp_runs=args.timestamp_runs, prefix="train")
     out_dir = run_paths.run_dir
 
-    agent_cfg = AgentConfig()
-    dqn_cfg = replace(agent_cfg, eps_start=0.6, n_step=3)
-    ddqn_cfg = replace(agent_cfg, eps_start=0.6, n_step=3)
-    pddqn_cfg = replace(agent_cfg, eps_start=0.6, n_step=3, target_update_tau=0.01)
+    # Build AgentConfig with optional CLI/JSON overrides.
+    agent_kw: dict[str, object] = {}
+    if args.eps_decay is not None:
+        agent_kw["eps_decay"] = int(args.eps_decay)
+    if args.gamma is not None:
+        agent_kw["gamma"] = float(args.gamma)
+    if args.learning_rate is not None:
+        agent_kw["learning_rate"] = float(args.learning_rate)
+    agent_cfg = AgentConfig(**agent_kw)  # type: ignore[arg-type]
+
+    # Per-algo configs.  --target-update-tau overrides ALL algos when set.
+    tau_override = float(args.target_update_tau) if args.target_update_tau is not None else None
+    pddqn_tau = float(tau_override) if tau_override is not None else 0.01
+    dqn_cfg = replace(agent_cfg, eps_start=0.6, n_step=3, **({"target_update_tau": tau_override} if tau_override is not None else {}))
+    ddqn_cfg = replace(agent_cfg, eps_start=0.6, n_step=3, **({"target_update_tau": tau_override} if tau_override is not None else {}))
+    pddqn_cfg = replace(agent_cfg, eps_start=0.6, n_step=3, target_update_tau=pddqn_tau)
+
+    reward_clip = float(args.reward_clip)
     (out_dir / "configs").mkdir(parents=True, exist_ok=True)
     args_payload: dict[str, object] = {}
     for k, v in vars(args).items():
@@ -1215,6 +1341,7 @@ def main(argv: list[str] | None = None) -> int:
 
     all_rows: list[dict[str, float | int | str]] = []
     all_eval_rows: list[dict[str, float | int | str]] = []
+    all_diag_rows: list[dict[str, float | int | str]] = []
     curves: dict[str, dict[str, np.ndarray]] = {}
     algo_labels = {
         "mlp-dqn": "MLP-DQN",
@@ -1274,7 +1401,7 @@ def main(argv: list[str] | None = None) -> int:
         env_eval_rows: dict[str, list[dict[str, float | int]]] = {}
         for algo in args.rl_algos:
             cfg = algo_cfgs[str(algo)]
-            _, algo_returns, algo_eval = train_one(
+            _, algo_returns, algo_eval, algo_diag = train_one(
                 env,
                 str(algo),
                 episodes=args.episodes,
@@ -1309,11 +1436,14 @@ def main(argv: list[str] | None = None) -> int:
                 eval_score_time_weight=float(args.eval_score_time_weight),
                 progress=progress,
                 device=device,
+                reward_clip=float(reward_clip),
             )
             env_curves[str(algo)] = algo_returns
             env_eval_rows[str(algo)] = list(algo_eval)
             for row in algo_eval:
                 all_eval_rows.append({"env": env_name, "algo": str(algo), **row})
+            for row in algo_diag:
+                all_diag_rows.append({"env": env_name, "algo": str(algo), **row})
 
         curves[env_name] = dict(env_curves)
         for ep in range(args.episodes):
@@ -1335,6 +1465,14 @@ def main(argv: list[str] | None = None) -> int:
             plot_training_eval_metrics(df_eval, out_path=out_dir / "training_eval_metrics.png")
         except Exception as exc:
             print(f"Warning: failed to write training_eval_metrics.png: {exc}", file=sys.stderr)
+
+    if all_diag_rows:
+        df_diag = pd.DataFrame(all_diag_rows)
+        df_diag.to_csv(out_dir / "training_diagnostics.csv", index=False)
+        try:
+            plot_training_diagnostics(df_diag, out_path=out_dir / "training_diagnostics.png")
+        except Exception as exc:
+            print(f"Warning: failed to write training_diagnostics.png: {exc}", file=sys.stderr)
 
     # Plot Fig. 13-style reward curves
     envs_to_plot = list(args.envs)[:4]
@@ -1381,6 +1519,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Wrote: {out_dir / 'training_eval.xlsx'}")
         if (out_dir / "training_eval_metrics.png").exists():
             print(f"Wrote: {out_dir / 'training_eval_metrics.png'}")
+    if all_diag_rows:
+        print(f"Wrote: {out_dir / 'training_diagnostics.csv'}")
+        if (out_dir / "training_diagnostics.png").exists():
+            print(f"Wrote: {out_dir / 'training_diagnostics.png'}")
     print(f"Wrote models under: {out_dir / 'models'}")
     print(f"Run dir: {out_dir}")
     return 0
