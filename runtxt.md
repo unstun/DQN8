@@ -85,6 +85,231 @@ conda run -n ros2py310 python infer.py --envs forest_b --out outputs_forest_base
 
 ---
 
+# Training Pipeline (V9)
+
+本节描述 V9（`repro_20260223_v9_raw_replay_soft_shield`）的完整训练流程。
+代码入口：`amr_dqn/cli/train.py` → `train_one()`。
+
+## 总览
+
+```
+阶段 0: 初始化           → Agent + Replay Buffer + Normalizer
+阶段 1: Demo 预填充      → 专家轨迹填入 Replay（~5000 条 transition）
+阶段 2: 监督预训练        → DQfD 风格 CE+Margin 损失（40000 步）
+阶段 3: 主训练循环        → 300 轮 episode，混合专家+ε-greedy + TD 学习
+阶段 4: 模型选择与保存    → final / best / pretrain 三候选 PK
+```
+
+## 阶段 0：初始化
+
+```python
+# train.py:359-376
+agent = DQNFamilyAgent(algo, obs_dim, n_actions, config, seed, device)
+rew_normalizer = RunningRewardNormalizer(clip=5.0)   # Welford 在线均值/方差
+```
+
+| 组件 | 说明 |
+|------|------|
+| Q 网络 + Q_target | MLP (3×256) 或 CNN；target 初始与 online 同步 |
+| Replay Buffer | 容量 100K，存 (obs, action, reward, next_obs, done, demo, next_mask) |
+| Reward Normalizer | V9: 只跟踪统计量，normalize 在采样时做 |
+| Eval 场景池 | 预采样 5 组固定 (start, goal)，保证评估可复现 |
+
+## 阶段 1：Demo 预填充
+
+**目的**：冷启动——Q 网络一开始什么都不会，纯随机探索几乎到不了终点。
+
+```python
+# train.py:436-514
+# 用 Hybrid A* / cost-to-go 专家跑若干轮，目标填 ~5000 条 transition
+while demo_added < demo_target:
+    obs, _ = env.reset(random_start_goal)      # 随机起终点
+    while not done:
+        action = expert_action()                # 专家控制
+        next_obs, reward, done, ... = env.step(action)
+        ep.append((obs, action, reward, ...))
+    if reached:                                 # 只保留成功 episode
+        for transition in ep:
+            rew_normalizer.update(reward)        # 更新统计量
+            reward = clip(reward, -5, 5)         # 存 raw（安全裁剪）
+            agent.observe(..., demo=True)         # 标记为 demo
+```
+
+关键点：
+- 只保存成功到达终点的 episode（失败的专家轨迹丢弃）
+- `demo=True` 标记使后续 DQfD 损失只作用于这些 transition
+- Reward 存原始值，normalizer 只更新统计量（V9 改进）
+
+## 阶段 2：监督预训练（DQfD 风格）
+
+**目的**：在 TD 学习开始前让 Q 网络具备基本导航能力。
+
+```python
+# train.py:516-553
+# 40000 步监督学习
+agent.pretrain_on_demos(steps=40000)
+```
+
+每步做什么：
+1. 从 Replay 采样 batch=128，取 `demo=True` 的 transition
+2. **Cross-Entropy 损失**：`CE(softmax(Q(s)), a_expert)` — 让 Q 值分布对准专家动作
+3. **Margin 损失**：`max(0, Q(s,a_other) + 0.8 - Q(s,a_expert))` — 确保专家动作 Q 值最高
+
+每 2000 步做快速评估：如果 greedy 策略已能到达终点则提前停止。
+完成后同步 `Q_target = Q`，并保存 pretrain 快照作为 checkpoint 候选。
+
+## 阶段 3：主训练循环（300 轮）
+
+每轮 episode 的完整流程：
+
+### 3.1 环境 Reset
+
+```python
+# train.py:668-683
+env.reset(seed=seed+ep, options={"random_start_goal": True, "rand_min_cost_m": 6.0})
+```
+
+每轮随机采样 (start, goal)，最小 cost 距离 6m，全随机（`fixed_prob=0`）。
+
+### 3.2 逐步交互（最多 600 步）
+
+```
+每步执行三层动作选择门控：
+│
+├─ 第一层：专家探索？
+│   p_exp = 0.4 × linear_decay(ep, decay=0.5)
+│   随机数 < p_exp → 调用 Hybrid A*/cost-to-go 专家
+│
+└─ 第二层：forest_select_action(training_mode=True)
+    │
+    ├─ ε-greedy 触发？(ε: 0.9→0.01，线性衰减 250 轮)
+    │   是 → 从 admissible_mask（碰撞检查，无前进检查）随机选
+    │
+    └─ 否 → Q 网络贪心
+        ├─ argmax Q 是 admissible？→ 用它
+        ├─ top-10 候选逐个检查 → 用第一个 admissible
+        ├─ full mask fallback → masked argmax Q
+        └─ 最终兜底 → 短距 rollout 启发式
+```
+
+`training_mode=True`（V9 关键改进）：
+- 只检查碰撞安全（`min_progress_m=0`）
+- **不**检查"是否前进"，让 Q 网络从 reward 信号自己学前进
+- 推理时 `training_mode=False`，恢复前进检查
+
+### 3.3 Reward 处理（V9）
+
+```python
+# train.py:733-738
+rew_normalizer.update(float(reward))          # 更新 Welford 统计量
+reward = clip(reward, -5, 5)                  # 存入 replay 的是 raw 值
+```
+
+V9 改进：**存 raw，采样时归一化**。
+- V8 在此处做 `reward = normalizer.normalize(reward)` 导致 replay 中 reward 随统计量漂移
+- V9 只更新统计量，normalize 推迟到 `agent.update()` 采样时
+
+### 3.4 Episode 结束后：存 Replay + TD 更新
+
+```python
+# train.py:758-774
+# 1. 批量存入 replay buffer
+for transition in ep_buffer:
+    agent.observe(..., demo=(used_expert and reached))  # 只有成功的专家步标 demo
+
+# 2. 执行累积的 TD 更新（每 4 步一次，需 global_step > 5000）
+for _ in range(pending_updates):
+    loss_info = agent.update(rew_normalizer=rew_normalizer)
+```
+
+`agent.update()` 内部（`agents.py:399-492`）：
+
+```
+采样 batch=128 from Replay
+    │
+    ├─ rewards = normalize_tensor(rewards)   ← V9: 用当前统计量归一化
+    │
+    ├─ TD target:
+    │   DQN:  r + γ^n × max_a Q_target(s', a)
+    │   DDQN: r + γ^n × Q_target(s', argmax_a Q_online(s', a))
+    │   (next_action_mask 过滤不安全动作)
+    │
+    ├─ TD 损失:    SmoothL1(Q(s,a), target)
+    ├─ Margin 损失: max(0, Q(s,a_other)+0.8 - Q(s,a_demo))  [仅 demo 样本]
+    ├─ CE 损失:    CrossEntropy(Q(s), a_demo)                [仅 demo 样本]
+    ├─ Total = TD + 1.0×Margin + 1.0×CE
+    │
+    ├─ 梯度裁剪 max_norm=10.0
+    ├─ Adam 更新 lr=5e-4
+    │
+    └─ Target 网络更新:
+        DQN/DDQN: 硬替换（每 1000 步）
+        PDDQN:    Polyak 软更新（τ=0.005，每步）
+```
+
+### 3.5 评估与 Checkpoint
+
+- **每 10 轮**在 5 组固定场景做 greedy eval（`explore=False, training_mode=False`）
+- 记录 success_rate / avg_return / planning_cost
+- 维护 `best_q`：按 reached > timeout > collision 排序的最佳 episode checkpoint
+
+## 阶段 4：模型选择与保存
+
+```python
+# train.py:903-924
+# 三候选 greedy eval PK:
+#   final_q:    第 300 轮结束时的网络
+#   best_q:     训练中 episode_score 最高的快照
+#   pretrain_q: 监督预训练结束时的快照
+# 选 greedy eval 得分最高的 → 保存为 .pt
+```
+
+## Reward 构成
+
+每步 reward 由多个分量叠加（`env.py:1175-1220`）：
+
+| 分量 | 系数 | 含义 |
+|------|------|------|
+| `k_p × (cost_before − cost_after)` | 12.0 | **前进奖励**（接近终点=正值） |
+| `−k_t` | −0.1 | 时间惩罚（每步固定） |
+| `−k_δ × (Δδ)²` | −1.5 | 转向平滑性 |
+| `−k_a × (Δa)² × v²` | −0.2 | 加速平滑性 |
+| `−k_κ × tan(δ)²` | −0.2 | 曲率惩罚 |
+| `−k_o × 1/od` | −1.5 | 靠近障碍物惩罚（OD < 安全距离时） |
+| `−k_v × speed_coupling` | −2.0 | 近障碍物高速惩罚 |
+| 碰撞 | **−200** | 终止 |
+| 到达终点 | **+400** | 终止 |
+| 卡住 | −stuck_penalty | 终止 |
+
+典型成功 episode 的 return ≈ 150~350（取决于路径长度和平滑度）。
+
+## 关键时间线（V9 / 300 轮）
+
+```
+Episode:  0 ─────── 50 ────── 100 ────── 150 ────── 200 ────── 250 ────── 300
+              │          │          │          │          │          │
+Expert:    40% →     ~28% →     ~16% →      ~8% →      ~3% →      ~1% →    ~0%
+Epsilon:   0.9 →     0.72 →     0.54 →     0.37 →     0.19 →     0.01 →   0.01
+              │                                                       │
+              └── Q 网络逐渐接管 ─────────────────────────────────→ 完全自主
+```
+
+## 六种算法的区别
+
+| 算法 | 架构 | TD Target | Target 更新 |
+|------|------|-----------|-------------|
+| MLP-DQN | MLP 3×256 (2ch) | max_a Q_target(s',a) | 硬替换/1000步 |
+| MLP-DDQN | MLP 3×256 (2ch) | Q_target(s', argmax Q_online) | 硬替换/1000步 |
+| MLP-PDDQN | MLP 3×256 (2ch) | Q_target(s', argmax Q_online) | Polyak τ=0.005 |
+| CNN-DQN | CNN+FC (3ch) | max_a Q_target(s',a) | 硬替换/1000步 |
+| CNN-DDQN | CNN+FC (3ch) | Q_target(s', argmax Q_online) | 硬替换/1000步 |
+| CNN-PDDQN | CNN+FC (3ch) | Q_target(s', argmax Q_online) | Polyak τ=0.005 |
+
+MLP 用 2 通道（occupancy + cost-to-go），CNN 用 3 通道（+ EDT clearance）。
+PDDQN = Polyak Double DQN（在 DDQN 基础上把硬替换换成软更新）。
+
+---
+
 # Parameter reference
 
 Run `conda run -n ros2py310 python train.py --help` / `conda run -n ros2py310 python infer.py --help` to see the same flags from the CLI help output.

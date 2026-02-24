@@ -442,7 +442,8 @@ def train_one(
                 r_i = float(rew_buf[i])
                 if rew_normalizer is not None:
                     rew_normalizer.update(r_i)
-                    r_i = rew_normalizer.normalize(r_i)
+                if reward_clip > 0.0:
+                    r_i = float(np.clip(r_i, -reward_clip, reward_clip))
                 agent.observe(
                     obs_buf[i],
                     int(act_buf[i]),
@@ -494,7 +495,8 @@ def train_one(
                         r_norm = float(r)
                         if rew_normalizer is not None:
                             rew_normalizer.update(r_norm)
-                            r_norm = rew_normalizer.normalize(r_norm)
+                        if reward_clip > 0.0:
+                            r_norm = float(np.clip(r_norm, -reward_clip, reward_clip))
                         agent.observe(
                             o,
                             int(a),
@@ -709,12 +711,14 @@ def train_one(
                         env, agent, obs,
                         episode=ep, explore=True,
                         horizon_steps=adm_h, topk=topk_k,
+                        training_mode=True,
                     )
             elif bool(forest_action_shield) and isinstance(env, AMRBicycleEnv):
                 action = forest_select_action(
                     env, agent, obs,
                     episode=ep, explore=True,
                     horizon_steps=adm_h, topk=topk_k,
+                    training_mode=True,
                 )
             else:
                 action = agent.act(obs, episode=ep, explore=True)
@@ -726,11 +730,11 @@ def train_one(
             # Time-limit truncation should not be treated as terminal for bootstrapping.
             # Only mark expert transitions as demos when the *episode* reaches the goal.
             # Failed expert steps are still useful off-policy data, but should not be imitated/preserved.
-            # Reward normalization (V8) or hard clipping (V6 fallback).
+            # V9: store RAW reward in replay; normalize at sampling time in update().
+            # Always track stats so the normalizer is up-to-date for sampling.
             if rew_normalizer is not None:
                 rew_normalizer.update(float(reward))
-                reward = rew_normalizer.normalize(float(reward))
-            elif reward_clip > 0.0:
+            if reward_clip > 0.0:
                 reward = float(np.clip(float(reward), -reward_clip, reward_clip))
             ep_buffer.append(
                 (
@@ -765,7 +769,7 @@ def train_one(
             )
         ep_losses: list[dict[str, float]] = []
         for _ in range(int(pending_updates)):
-            loss_info = agent.update()
+            loss_info = agent.update(rew_normalizer=rew_normalizer)
             if loss_info:
                 ep_losses.append(loss_info)
 

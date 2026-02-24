@@ -396,7 +396,7 @@ class DQNFamilyAgent:
             self.q_target.load_state_dict(self.q.state_dict())
         return int(trained)
 
-    def update(self) -> dict[str, float]:
+    def update(self, *, rew_normalizer: object | None = None) -> dict[str, float]:
         if len(self.replay) < self.config.batch_size:
             return {}
 
@@ -404,6 +404,11 @@ class DQNFamilyAgent:
         obs = torch.from_numpy(batch.obs).to(self.device)
         actions = torch.from_numpy(batch.actions).to(self.device)
         rewards = torch.from_numpy(batch.rewards).to(self.device)
+        # V9: normalize rewards at sampling time using current running stats.
+        if rew_normalizer is not None:
+            _norm_t = getattr(rew_normalizer, "normalize_tensor", None)
+            if callable(_norm_t):
+                rewards = _norm_t(rewards)
         next_obs = torch.from_numpy(batch.next_obs).to(self.device)
         next_action_masks = torch.from_numpy(batch.next_action_masks).to(self.device)
         dones = torch.from_numpy(batch.dones).to(self.device)

@@ -29,6 +29,7 @@ def forest_select_action(
     topk: int = 10,
     min_od_m: float = 0.0,
     min_progress_m: float = 1e-4,
+    training_mode: bool = False,
 ) -> int:
     """Unified action selection for AMRBicycleEnv (forest) environments.
 
@@ -40,11 +41,15 @@ def forest_select_action(
         5. Top-k search: try next-best Q actions for admissibility
         6. prog_mask fallback: masked argmax Q over admissible actions
         7. Last resort: env heuristic short-rollout fallback
+
+    V9: ``training_mode=True`` uses collision-only safety (min_progress_m=0)
+    so the Q-network learns progress from reward, not from mask filtering.
     """
     adm_h = max(1, int(horizon_steps))
     topk_k = max(1, int(topk))
     min_od = float(min_od_m)
-    min_prog = float(min_progress_m)
+    # V9: during training, only enforce collision safety; let Q learn progress.
+    min_prog = 0.0 if bool(training_mode) else float(min_progress_m)
 
     # --- epsilon exploration (training only) ---------------------------------
     if explore and (agent._rng.random() < agent.epsilon(episode)):

@@ -1,12 +1,13 @@
 """Running reward normalization (Welford online mean/std).
 
-V8: replaces hard reward clipping as the primary reward scaling method.
+V8→V9: normalize at sampling time, not at collection time.
 Keeps clip as a safety net on the *normalized* value.
 """
 
 from __future__ import annotations
 
 import numpy as np
+import torch
 
 
 class RunningRewardNormalizer:
@@ -39,3 +40,10 @@ class RunningRewardNormalizer:
             return float(np.clip(reward, -self.clip, self.clip))
         normed = (reward - self._mean) / self.std
         return float(np.clip(normed, -self.clip, self.clip))
+
+    def normalize_tensor(self, rewards: torch.Tensor) -> torch.Tensor:
+        """Vectorized normalize + clip for a batch of rewards (no stats update)."""
+        if self._count < 2:
+            return rewards.clamp(-self.clip, self.clip)
+        normed = (rewards - self._mean) / self.std
+        return normed.clamp(-self.clip, self.clip)
