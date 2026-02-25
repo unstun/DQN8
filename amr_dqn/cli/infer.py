@@ -864,6 +864,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Forest-only: maximum start→goal cost-to-go (meters) for the 'long' random-pair suite (<=0 disables).",
     )
     ap.add_argument(
+        "--goal-tolerance",
+        type=float,
+        default=1.0,
+        help="Goal position tolerance in meters (env.goal_tolerance_m). Default: 1.0.",
+    )
+    ap.add_argument(
         "--self-check",
         action="store_true",
         help="Print CUDA/runtime info and exit (use to verify CUDA setup).",
@@ -1096,6 +1102,7 @@ def main(argv: list[str] | None = None) -> int:
                 sensor_range_m=float(args.sensor_range),
                 n_sectors=args.n_sectors,
                 obs_map_size=int(args.obs_map_size),
+                goal_tolerance_m=float(args.goal_tolerance),
             )
             cell_size_m = 0.1
         else:

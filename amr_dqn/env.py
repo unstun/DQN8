@@ -597,6 +597,7 @@ class AMRBicycleEnv(gym.Env):
         reward_k_o: float = 1.5,
         reward_k_v: float = 2.0,
         reward_k_c: float = 0.0,
+        reward_k_goal: float = 0.0,
         reward_obs_max: float = 10.0,
         stuck_steps: int = 20,
         stuck_min_disp_m: float = 0.02,
@@ -710,6 +711,7 @@ class AMRBicycleEnv(gym.Env):
         self.reward_k_o = float(reward_k_o)
         self.reward_k_v = float(reward_k_v)
         self.reward_k_c = float(reward_k_c)
+        self.reward_k_goal = float(reward_k_goal)
         self.reward_obs_max = float(reward_obs_max)
         self.reward_eps = 1e-3
         self.stuck_steps = int(stuck_steps)
@@ -1211,11 +1213,21 @@ class AMRBicycleEnv(gym.Env):
                 dv = max(0.0, float(v_next) - float(v_cap))
                 reward -= self.reward_k_c * float(dv) ** 2
 
+        # Goal proximity shaping (per-step bonus when approaching the goal region).
+        if self.reward_k_goal > 0.0:
+            _shaping_r = 2.0 * self.goal_tolerance_m
+            if d_goal_after < _shaping_r:
+                reward += self.reward_k_goal * (1.0 - d_goal_after / _shaping_r)
+
         # Terminal
         if collision:
             reward -= 200.0
         elif reached:
-            reward += 400.0
+            if self.reward_k_goal > 0.0:
+                _prox = max(0.0, 1.0 - d_goal_after / self.goal_tolerance_m)
+                reward += 200.0 + 200.0 * _prox
+            else:
+                reward += 400.0
         if stuck:
             reward -= float(self.stuck_penalty)
 

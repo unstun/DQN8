@@ -1200,6 +1200,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Enable running-mean/std reward normalization (V8). Clip is used as safety net.",
     )
     ap.add_argument(
+        "--goal-tolerance",
+        type=float,
+        default=1.0,
+        help="Goal position tolerance in meters (env.goal_tolerance_m). Default: 1.0.",
+    )
+    ap.add_argument(
+        "--reward-k-goal",
+        type=float,
+        default=0.0,
+        help="Goal proximity shaping gain (V12). 0 disables; try 5.0. Default: 0.0.",
+    )
+    ap.add_argument(
         "--progress",
         action=argparse.BooleanOptionalAction,
         default=None,
@@ -1375,6 +1387,8 @@ def main(argv: list[str] | None = None) -> int:
                 sensor_range_m=float(args.sensor_range),
                 n_sectors=args.n_sectors,
                 obs_map_size=int(args.obs_map_size),
+                goal_tolerance_m=float(args.goal_tolerance),
+                reward_k_goal=float(args.reward_k_goal),
             )
             forest_demo_data = None
             if bool(args.forest_demo_prefill) and int(args.learning_starts) > 0:
