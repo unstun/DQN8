@@ -1225,7 +1225,7 @@ class AMRBicycleEnv(gym.Env):
         elif reached:
             if self.reward_k_goal > 0.0:
                 _prox = max(0.0, 1.0 - d_goal_after / self.goal_tolerance_m)
-                reward += 200.0 + 200.0 * _prox
+                reward += 350.0 + 50.0 * _prox
             else:
                 reward += 400.0
         if stuck:
