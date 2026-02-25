@@ -351,6 +351,7 @@ def train_one(
     eval_every: int,
     eval_runs: int,
     eval_score_time_weight: float,
+    save_every: int,
     progress: bool,
     device: torch.device,
     reward_clip: float = 0.0,
@@ -833,6 +834,12 @@ def train_one(
             best_q_target = clone_state_dict(agent.q_target.state_dict())
             best_train_steps = int(agent._train_steps)
 
+        # Periodic checkpoint saving.
+        if save_every > 0 and (ep + 1) % save_every == 0:
+            ckpt_dir = out_dir / "checkpoints" / env.map_spec.name
+            ckpt_dir.mkdir(parents=True, exist_ok=True)
+            agent.save(ckpt_dir / f"{agent.algo}_ep{ep + 1:05d}.pt")
+
     final_q = clone_state_dict(agent.q.state_dict())
     final_q_target = clone_state_dict(agent.q_target.state_dict())
     final_train_steps = int(agent._train_steps)
@@ -998,6 +1005,12 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--train-freq", type=int, default=4)
     ap.add_argument("--learning-starts", type=int, default=2000)
     ap.add_argument("--ma-window", type=int, default=20, help="Moving average window for plotting (1=raw).")
+    ap.add_argument(
+        "--save-every",
+        type=int,
+        default=10,
+        help="Save a .pt checkpoint every N episodes (0 disables). Default: 10.",
+    )
     ap.add_argument(
         "--eval-every",
         type=int,
@@ -1437,6 +1450,7 @@ def main(argv: list[str] | None = None) -> int:
                 eval_every=_eval_every,
                 eval_runs=int(args.eval_runs),
                 eval_score_time_weight=float(args.eval_score_time_weight),
+                save_every=int(args.save_every),
                 progress=progress,
                 device=device,
                 reward_clip=float(reward_clip),
