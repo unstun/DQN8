@@ -589,6 +589,7 @@ class AMRBicycleEnv(gym.Env):
         # and short-horizon safety shields (the paper's 0.30m can be hard to hit exactly).
         goal_tolerance_m: float = 1,
         goal_angle_tolerance_deg: float = 180.0,
+        goal_speed_tol_m_s: float = 999.0,
         reward_k_p: float = 12.0,
         reward_k_t: float = 0.1,
         reward_k_delta: float = 1.5,
@@ -647,6 +648,7 @@ class AMRBicycleEnv(gym.Env):
         self.goal_angle_tolerance_rad = float(math.radians(float(goal_angle_tolerance_deg)))
         if not (0.0 < self.goal_angle_tolerance_rad <= math.pi):
             raise ValueError("goal_angle_tolerance_deg must be in (0, 180]")
+        self.goal_speed_tol_m_s = float(goal_speed_tol_m_s)
 
         # Precompute EDT + cost-to-go once (forest maps are static).
         self._eps_cell_m = float(math.sqrt(2.0) * 0.5 * self.cell_size_m)
@@ -1148,7 +1150,7 @@ class AMRBicycleEnv(gym.Env):
         cost_after = self._cost_to_goal_pose_m(self._x_m, self._y_m, float(self._psi_rad))
         d_goal_after = self._distance_to_goal_m()
         alpha = self._goal_relative_angle_rad()
-        reached = (d_goal_after <= self.goal_tolerance_m) and (abs(alpha) <= self.goal_angle_tolerance_rad)
+        reached = (d_goal_after <= self.goal_tolerance_m) and (abs(alpha) <= self.goal_angle_tolerance_rad) and (abs(float(self._v_m_s)) <= self.goal_speed_tol_m_s)
 
         collision = bool(self._last_collision)
         od_m = float(self._last_od_m)
@@ -1215,9 +1217,13 @@ class AMRBicycleEnv(gym.Env):
 
         # Goal proximity shaping (per-step bonus when approaching the goal region).
         if self.reward_k_goal > 0.0:
-            _shaping_r = 2.0 * self.goal_tolerance_m
+            _shaping_r = 1.5 * self.goal_tolerance_m
             if d_goal_after < _shaping_r:
                 reward += self.reward_k_goal * (1.0 - d_goal_after / _shaping_r)
+                # Speed penalty near goal: penalise high speed to encourage stopping.
+                if self.goal_speed_tol_m_s < 900.0:
+                    _v_ratio = abs(float(self._v_m_s)) / float(self.model.v_max_m_s)
+                    reward -= self.reward_k_goal * _v_ratio
 
         # Terminal
         if collision:

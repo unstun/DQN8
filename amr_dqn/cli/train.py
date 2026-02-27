@@ -1206,6 +1206,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Goal position tolerance in meters (env.goal_tolerance_m). Default: 1.0.",
     )
     ap.add_argument(
+        "--goal-speed-tol",
+        type=float,
+        default=999.0,
+        help="Goal speed tolerance in m/s. 999=disabled. Try 0.5. Default: 999.0.",
+    )
+    ap.add_argument(
         "--reward-k-goal",
         type=float,
         default=0.0,
@@ -1388,6 +1394,7 @@ def main(argv: list[str] | None = None) -> int:
                 n_sectors=args.n_sectors,
                 obs_map_size=int(args.obs_map_size),
                 goal_tolerance_m=float(args.goal_tolerance),
+                goal_speed_tol_m_s=float(args.goal_speed_tol),
                 reward_k_goal=float(args.reward_k_goal),
             )
             forest_demo_data = None

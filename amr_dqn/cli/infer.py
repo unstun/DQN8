@@ -351,6 +351,14 @@ def rollout_tracked_path_mpc(
             a_n = accel / max(1e-9, float(a_max))
             score -= float(w_control) * (dd_n * dd_n + a_n * a_n)
 
+        # Goal-proximity deceleration: when close to goal, prefer low end-speed.
+        _gx_m = float(env.goal_xy[0]) * float(env.cell_size_m)
+        _gy_m = float(env.goal_xy[1]) * float(env.cell_size_m)
+        _d_goal_now = float(np.hypot(float(env._x_m) - _gx_m, float(env._y_m) - _gy_m))
+        _decel_r = 3.0 * float(env.goal_tolerance_m)
+        if _d_goal_now < _decel_r:
+            score -= 2.0 * (v / max(1e-9, float(v_max)))
+
         ok = (~coll) & np.isfinite(cost1)
         ok_reached = ok & reached
         if bool(ok_reached.any()):
@@ -870,6 +878,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Goal position tolerance in meters (env.goal_tolerance_m). Default: 1.0.",
     )
     ap.add_argument(
+        "--goal-speed-tol",
+        type=float,
+        default=999.0,
+        help="Goal speed tolerance in m/s. 999=disabled. Try 0.5. Default: 999.0.",
+    )
+    ap.add_argument(
         "--self-check",
         action="store_true",
         help="Print CUDA/runtime info and exit (use to verify CUDA setup).",
@@ -1103,6 +1117,7 @@ def main(argv: list[str] | None = None) -> int:
                 n_sectors=args.n_sectors,
                 obs_map_size=int(args.obs_map_size),
                 goal_tolerance_m=float(args.goal_tolerance),
+                goal_speed_tol_m_s=float(args.goal_speed_tol),
             )
             cell_size_m = 0.1
         else:

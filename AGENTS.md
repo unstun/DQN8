@@ -11,6 +11,7 @@
 5) 代码改动后在`configs/`新增`repro_YYYYMMDD_<topic>.json`；纯文档豁免。
 6) `AGENTS.md`与`CLAUDE.md`逐行一致；改后`diff -u AGENTS.md CLAUDE.md`验证。
 7) 训练/推理本地执行（SSH远端不可用）。
+8) **消融实验必须留档**：每次消融实验结束后，在`runs/ablation_logs/`写入 Markdown 记录，包含变体矩阵、各变体 success_rate 对比表、结论。文件命名`ablation_YYYYMMDD_<topic>.md`。
 
 ## 1. 常用命令
 
