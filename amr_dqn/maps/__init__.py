@@ -72,11 +72,35 @@ class ArrayGridMapSpec:
 ENV_ORDER: tuple[str, ...] = ()
 FOREST_ENV_ORDER: tuple[str, ...] = ("forest_a", "forest_b", "forest_c", "forest_d")
 
+# Real-world PGM maps (treated as forest-type: use AMRBicycleEnv with same params)
+REALMAP_ENV_ORDER: tuple[str, ...] = ("realmap_a",)
+
+# Combined env order used externally
+ALL_ENV_ORDER: tuple[str, ...] = FOREST_ENV_ORDER + REALMAP_ENV_ORDER
+
 
 MAPS: dict[str, GridMapSpec] = {}
 
 
 _FOREST_CACHE: dict[str, ArrayGridMapSpec] = {}
+_REALMAP_CACHE: dict[str, ArrayGridMapSpec] = {}
+
+
+def _get_realmap_spec(env_name: str) -> ArrayGridMapSpec:
+    """Load a real-world PGM map as ArrayGridMapSpec (y=0 at bottom, 1=obstacle)."""
+    if env_name in _REALMAP_CACHE:
+        return _REALMAP_CACHE[env_name]
+    from amr_dqn.maps.pgm import load_pgm_map
+    if env_name == "realmap_a":
+        pgm_path = "/home/sun/下载/realmap/map_a.pgm"
+        # Best start/goal found by distance-transform analysis (clearance >1.8m each)
+        start_xy = (34, 29)   # x=34, y=29 (y=0 at bottom), clearance≈1.88m
+        goal_xy  = (371, 109) # x=371, y=109, clearance≈2.20m
+    else:
+        raise KeyError(env_name)
+    spec = load_pgm_map(pgm_path, start_xy, goal_xy, name=env_name)
+    _REALMAP_CACHE[env_name] = spec
+    return spec
 
 
 def _get_forest_spec(env_name: str) -> ArrayGridMapSpec:
@@ -151,11 +175,13 @@ def _get_forest_spec(env_name: str) -> ArrayGridMapSpec:
 
 
 def get_map_spec(env_name: str) -> MapSpec:
+    if env_name in REALMAP_ENV_ORDER:
+        return _get_realmap_spec(env_name)
     if env_name in FOREST_ENV_ORDER:
         return _get_forest_spec(env_name)
     try:
         return MAPS[env_name]
     except KeyError as e:
         raise KeyError(
-            f"Unknown env {env_name!r}. Options: {sorted(list(MAPS) + list(FOREST_ENV_ORDER))}"
+            f"Unknown env {env_name!r}. Options: {sorted(list(MAPS) + list(FOREST_ENV_ORDER) + list(REALMAP_ENV_ORDER))}"
         ) from e

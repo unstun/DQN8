@@ -24,7 +24,7 @@ from amr_dqn.agents import AgentConfig, DQNFamilyAgent, parse_rl_algo
 from amr_dqn.config_io import apply_config_defaults, load_json, resolve_config_path, select_section
 from amr_dqn.env import AMRBicycleEnv, AMRGridEnv, RewardWeights
 from amr_dqn.forest_policy import forest_compute_next_mask, forest_select_action
-from amr_dqn.maps import FOREST_ENV_ORDER, get_map_spec
+from amr_dqn.maps import FOREST_ENV_ORDER, REALMAP_ENV_ORDER, get_map_spec
 
 
 def moving_average(x: np.ndarray, window: int) -> np.ndarray:
@@ -96,7 +96,10 @@ def plot_training_eval_metrics(df_eval: pd.DataFrame, *, out_path: Path) -> None
                 y = pd.to_numeric(sub[col], errors="coerce").astype(float).to_numpy()
                 if col == "planning_cost":
                     y = np.where(np.isfinite(y), y, np.nan)
-                ax.plot(x, y, label=label, linewidth=1.0)
+                ax.plot(x, y, alpha=0.25, linewidth=0.7, color=ax._get_lines.get_next_color())
+                win = max(1, len(y) // 15)
+                y_smooth = pd.Series(y).rolling(window=win, min_periods=1, center=True).mean().to_numpy()
+                ax.plot(x, y_smooth, label=label, linewidth=1.5, color=ax.lines[-1].get_color())
 
             if i == 0:
                 ax.set_title(title)
@@ -164,7 +167,10 @@ def plot_training_diagnostics(df_diag: pd.DataFrame, *, out_path: Path) -> None:
                 x = sub["episode"].to_numpy()
                 y = pd.to_numeric(sub[col], errors="coerce").astype(float).to_numpy()
                 y = np.where(np.isfinite(y), y, np.nan)
-                ax.plot(x, y, label=label, linewidth=0.8, alpha=0.85)
+                ax.plot(x, y, alpha=0.15, linewidth=0.5, color=ax._get_lines.get_next_color())
+                win = max(1, len(y) // 15)
+                y_smooth = pd.Series(y).rolling(window=win, min_periods=1, center=True).mean().to_numpy()
+                ax.plot(x, y_smooth, label=label, linewidth=1.2, color=ax.lines[-1].get_color())
             if i == 0:
                 ax.set_title(title, fontsize=9)
             if j == 0:
@@ -1242,7 +1248,7 @@ def main(argv: list[str] | None = None) -> int:
         apply_config_defaults(ap, cfg, strict=True)
 
     args = ap.parse_args(argv)
-    forest_envs = set(FOREST_ENV_ORDER)
+    forest_envs = set(FOREST_ENV_ORDER) | set(REALMAP_ENV_ORDER)
     if int(args.max_steps) == 300 and args.envs and all(str(e) in forest_envs for e in args.envs):
         args.max_steps = 600
     canonical_all = ("mlp-dqn", "mlp-ddqn", "mlp-pddqn", "cnn-dqn", "cnn-ddqn", "cnn-pddqn")
@@ -1385,7 +1391,7 @@ def main(argv: list[str] | None = None) -> int:
 
     for env_name in args.envs:
         spec = get_map_spec(env_name)
-        if env_name in FOREST_ENV_ORDER:
+        if env_name in FOREST_ENV_ORDER or env_name in REALMAP_ENV_ORDER:
             env = AMRBicycleEnv(
                 spec,
                 max_steps=args.max_steps,
@@ -1527,11 +1533,17 @@ def main(argv: list[str] | None = None) -> int:
             series = curves.get(env_name, {}).get(str(algo))
             if series is None:
                 continue
+            eps_x = list(range(1, args.episodes + 1))
+            color = ax._get_lines.get_next_color()
+            ax.plot(eps_x, series, alpha=0.2, linewidth=0.7, color=color)
+            win = max(1, len(series) // 15)
+            smooth = pd.Series(series).rolling(window=win, min_periods=1, center=True).mean().tolist()
             ax.plot(
-                range(1, args.episodes + 1),
-                series,
+                eps_x,
+                smooth,
                 label=algo_labels.get(str(algo), str(algo).upper()),
-                linewidth=1.0,
+                linewidth=1.5,
+                color=color,
             )
         ax.set_title(f"Env. ({env_name})")
         ax.set_xlabel("Episodes")

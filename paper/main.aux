@@ -1,0 +1,120 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{dolgov2010path}
+\citation{karaman2011sampling}
+\citation{mnih2015human}
+\citation{van2016deep}
+\citation{lillicrap2015continuous}
+\citation{dolgov2010path}
+\citation{karaman2011sampling}
+\citation{mnih2015human}
+\citation{van2016deep}
+\citation{lillicrap2015continuous}
+\citation{hester2018deep}
+\@writefile{toc}{\contentsline {section}{\numberline {I}Introduction}{1}{section.1}\protected@file@percent }
+\newlabel{sec:intro}{{I}{1}{Introduction}{section.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {II}Related Work}{1}{section.2}\protected@file@percent }
+\newlabel{sec:related}{{II}{1}{Related Work}{section.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-A}}Classical Path Planning}{1}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-B}}Deep Reinforcement Learning for Navigation}{1}{subsection.2.2}\protected@file@percent }
+\citation{tai2017virtual}
+\citation{xie2018learning}
+\citation{huang2020closer}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-C}}Action Masking and Safety in RL}{2}{subsection.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {III}Problem Formulation}{2}{section.3}\protected@file@percent }
+\newlabel{sec:problem}{{III}{2}{Problem Formulation}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}Vehicle Model}{2}{subsection.3.1}\protected@file@percent }
+\newlabel{eq:bicycle}{{1}{2}{Vehicle Model}{equation.3.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}Forest Environment}{2}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}MDP Formulation}{2}{subsection.3.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Forest environment (\texttt  {forest\_a}) with planned paths from all algorithms. Left: short-range scenario (6--14\,m); Right: long-range scenario (42\,m+). Black dots represent trees; colored lines show paths from different algorithms.}}{2}{figure.1}\protected@file@percent }
+\newlabel{fig:env_overview}{{1}{2}{Forest environment (\texttt {forest\_a}) with planned paths from all algorithms. Left: short-range scenario (6--14\,m); Right: long-range scenario (42\,m+). Black dots represent trees; colored lines show paths from different algorithms}{figure.1}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces DQN variant specifications.}}{2}{table.1}\protected@file@percent }
+\newlabel{tab:variants}{{I}{2}{DQN variant specifications}{table.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {IV}Methodology}{2}{section.4}\protected@file@percent }
+\newlabel{sec:method}{{IV}{2}{Methodology}{section.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-A}}DQN Variant Family}{2}{subsection.4.1}\protected@file@percent }
+\newlabel{sec:variants}{{\mbox  {IV-A}}{2}{DQN Variant Family}{subsection.4.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces CNN Q-Network architecture. MLP variants omit the spatial branch and directly flatten all inputs.}}{3}{figure.2}\protected@file@percent }
+\newlabel{fig:architecture}{{2}{3}{CNN Q-Network architecture. MLP variants omit the spatial branch and directly flatten all inputs}{figure.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces Reward function coefficients.}}{3}{table.2}\protected@file@percent }
+\newlabel{tab:reward_coeff}{{II}{3}{Reward function coefficients}{table.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-B}}Reward Design}{3}{subsection.4.2}\protected@file@percent }
+\newlabel{sec:reward}{{\mbox  {IV-B}}{3}{Reward Design}{subsection.4.2}{}}
+\newlabel{eq:reward}{{2}{3}{Reward Design}{equation.4.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-C}}Four-Stage Training Pipeline}{3}{subsection.4.3}\protected@file@percent }
+\newlabel{sec:pipeline}{{\mbox  {IV-C}}{3}{Four-Stage Training Pipeline}{subsection.4.3}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {IV-C}1}Stage 1: Expert Demonstration Prefilling}{3}{subsubsection.4.3.1}\protected@file@percent }
+\@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces Four-stage DQN training pipeline}}{3}{algorithm.1}\protected@file@percent }
+\newlabel{alg:training}{{1}{3}{Four-Stage Training Pipeline}{algorithm.1}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {IV-C}2}Stage 2: Supervised Pretraining (DQfD-style)}{3}{subsubsection.4.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {IV-C}3}Stage 3: Main Training Loop}{3}{subsubsection.4.3.3}\protected@file@percent }
+\newlabel{eq:loss}{{5}{4}{Stage 3: Main Training Loop}{equation.4.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-D}}Multi-Level Safety Mechanism}{4}{subsection.4.4}\protected@file@percent }
+\newlabel{sec:safety}{{\mbox  {IV-D}}{4}{Multi-Level Safety Mechanism}{subsection.4.4}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {V}Experimental Setup}{4}{section.5}\protected@file@percent }
+\newlabel{sec:setup}{{V}{4}{Experimental Setup}{section.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-A}}Environment Configuration}{4}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-B}}Training Configuration}{4}{subsection.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-C}}Evaluation Protocol}{4}{subsection.5.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {III}{\ignorespaces Training hyperparameters.}}{4}{table.3}\protected@file@percent }
+\newlabel{tab:hyperparams}{{III}{4}{Training hyperparameters}{table.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {VI}Results}{4}{section.6}\protected@file@percent }
+\newlabel{sec:results}{{VI}{4}{Results}{section.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-A}}Training Dynamics}{4}{subsection.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-B}}Main Results}{4}{subsection.6.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Training evaluation metrics over 1000 episodes. From left to right: greedy success rate, average episode steps, average return, and planning cost. All variants converge to high success rates by episode 200.}}{5}{figure.3}\protected@file@percent }
+\newlabel{fig:training_curves}{{3}{5}{Training evaluation metrics over 1000 episodes. From left to right: greedy success rate, average episode steps, average return, and planning cost. All variants converge to high success rates by episode 200}{figure.3}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {IV}{\ignorespaces Evaluation results on \texttt  {forest\_a} (1000 episodes training). Best RL results in \textbf  {bold}.}}{5}{table.4}\protected@file@percent }
+\newlabel{tab:main_results}{{IV}{5}{Evaluation results on \texttt {forest\_a} (1000 episodes training). Best RL results in \textbf {bold}}{table.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Training reward curves (1000 episodes). Transparent lines: raw episode returns; solid lines: moving average. All six variants converge to similar reward levels ($\sim $400--500).}}{5}{figure.4}\protected@file@percent }
+\newlabel{fig:rewards}{{4}{5}{Training reward curves (1000 episodes). Transparent lines: raw episode returns; solid lines: moving average. All six variants converge to similar reward levels ($\sim $400--500)}{figure.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-C}}Path Visualization}{5}{subsection.6.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-D}}Control Profiles}{5}{subsection.6.4}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {V}{\ignorespaces Ablation: Goal-proximity reward shaping. RL mean success rate across 6 variants (300 episodes).}}{5}{table.5}\protected@file@percent }
+\newlabel{tab:ablation_shaping}{{V}{5}{Ablation: Goal-proximity reward shaping. RL mean success rate across 6 variants (300 episodes)}{table.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-E}}Architecture Comparison}{5}{subsection.6.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-F}}Ablation Studies}{5}{subsection.6.6}\protected@file@percent }
+\newlabel{sec:ablation}{{\mbox  {VI-F}}{5}{Ablation Studies}{subsection.6.6}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {VI-F}1}Goal-Proximity Reward Shaping}{5}{subsubsection.6.6.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Training diagnostics. From left to right: total loss, TD loss, $\epsilon $ schedule, Q-value spread (max$-$min), Q-value mean, and Q-value standard deviation. PDDQN variants exhibit smoother Q-value dynamics due to Polyak soft updates.}}{6}{figure.5}\protected@file@percent }
+\newlabel{fig:diagnostics}{{5}{6}{Training diagnostics. From left to right: total loss, TD loss, $\epsilon $ schedule, Q-value spread (max$-$min), Q-value mean, and Q-value standard deviation. PDDQN variants exhibit smoother Q-value dynamics due to Polyak soft updates}{figure.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Planned paths from all algorithms. Left: short-range; Right: long-range. RL agents (colored lines) produce smooth paths comparable to Hybrid~A* (black dashed), while RRT* paths (gray) show higher curvature.}}{6}{figure.6}\protected@file@percent }
+\newlabel{fig:paths_all}{{6}{6}{Planned paths from all algorithms. Left: short-range; Right: long-range. RL agents (colored lines) produce smooth paths comparable to Hybrid~A* (black dashed), while RRT* paths (gray) show higher curvature}{figure.6}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {VI}{\ignorespaces Per-variant success rates under goal-proximity shaping (Short / Long).}}{6}{table.6}\protected@file@percent }
+\newlabel{fig:ablation_detail}{{VI}{6}{Per-variant success rates under goal-proximity shaping (Short / Long)}{table.6}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {VII}{\ignorespaces Ablation: Pure DQN vs.\ DQN+MPC hybrid. RL mean success rate (300 episodes).}}{6}{table.7}\protected@file@percent }
+\newlabel{tab:ablation_mpc}{{VII}{6}{Ablation: Pure DQN vs.\ DQN+MPC hybrid. RL mean success rate (300 episodes)}{table.7}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {VI-F}2}DQN + MPC Hybrid Architecture}{6}{subsubsection.6.6.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {VI-F}3}Effect of Training Duration}{6}{subsubsection.6.6.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Speed and steering angle profiles during inference. Top row: short-range; Bottom row: long-range. RL agents show smooth velocity profiles with rapid acceleration and gradual deceleration.}}{7}{figure.7}\protected@file@percent }
+\newlabel{fig:controls}{{7}{7}{Speed and steering angle profiles during inference. Top row: short-range; Bottom row: long-range. RL agents show smooth velocity profiles with rapid acceleration and gradual deceleration}{figure.7}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Training evaluation metrics for the four reward shaping ablation variants (300 episodes each). The baseline (A) and shaping-only (B) converge stably, while speed constraints (C, D) cause severe performance degradation.}}{7}{figure.8}\protected@file@percent }
+\@writefile{lof}{\contentsline {subfigure}{\numberline{(a)}{\ignorespaces {A: Baseline (no shaping)}}}{7}{subfigure.8.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {subfigure}{\numberline{(b)}{\ignorespaces {B: +Goal-proximity shaping}}}{7}{subfigure.8.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {subfigure}{\numberline{(c)}{\ignorespaces {C: +Speed constraint (1.0\,m/s)}}}{7}{subfigure.8.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {subfigure}{\numberline{(d)}{\ignorespaces {D: +Speed constraint (0.5\,m/s)}}}{7}{subfigure.8.4}\protected@file@percent }
+\newlabel{fig:ablation_curves}{{8}{7}{Training evaluation metrics for the four reward shaping ablation variants (300 episodes each). The baseline (A) and shaping-only (B) converge stably, while speed constraints (C, D) cause severe performance degradation}{figure.8}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {VII}Discussion}{7}{section.7}\protected@file@percent }
+\newlabel{sec:discussion}{{VII}{7}{Discussion}{section.7}{}}
+\bibstyle{IEEEtran}
+\bibdata{references}
+\bibcite{dolgov2010path}{1}
+\bibcite{karaman2011sampling}{2}
+\bibcite{mnih2015human}{3}
+\bibcite{van2016deep}{4}
+\bibcite{lillicrap2015continuous}{5}
+\bibcite{hester2018deep}{6}
+\bibcite{tai2017virtual}{7}
+\bibcite{xie2018learning}{8}
+\bibcite{huang2020closer}{9}
+\@writefile{lot}{\contentsline {table}{\numberline {VIII}{\ignorespaces DQN+MPC per-variant success rates (Short / Long).}}{8}{table.8}\protected@file@percent }
+\newlabel{tab:ablation_mpc_detail}{{VIII}{8}{DQN+MPC per-variant success rates (Short / Long)}{table.8}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {IX}{\ignorespaces Effect of training duration on RL mean success rate.}}{8}{table.9}\protected@file@percent }
+\newlabel{tab:ablation_episodes}{{IX}{8}{Effect of training duration on RL mean success rate}{table.9}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {VIII}Conclusion}{8}{section.8}\protected@file@percent }
+\newlabel{sec:conclusion}{{VIII}{8}{Conclusion}{section.8}{}}
+\@writefile{toc}{\contentsline {section}{References}{8}{section*.1}\protected@file@percent }
+\gdef \@abspage@last{8}

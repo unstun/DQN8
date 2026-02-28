@@ -36,7 +36,7 @@ from amr_dqn.baselines.pathplan import (
 )
 from amr_dqn.env import AMRBicycleEnv, AMRGridEnv, RewardWeights
 from amr_dqn.forest_policy import forest_select_action
-from amr_dqn.maps import FOREST_ENV_ORDER, get_map_spec
+from amr_dqn.maps import FOREST_ENV_ORDER, REALMAP_ENV_ORDER, get_map_spec
 from amr_dqn.metrics import KPI, avg_abs_curvature, max_corner_degree, num_path_corners, path_length
 from amr_dqn.smoothing import chaikin_smooth
 
@@ -66,6 +66,8 @@ class RolloutResult:
     steps: int
     path_time_s: float
     controls: ControlTrace | None = None
+    planning_time_s: float = 0.0
+    tracking_time_s: float = 0.0
 
 
 def _env_dt_s(env: gym.Env) -> float:
@@ -170,6 +172,88 @@ def rollout_agent(
         steps=int(steps),
         path_time_s=float(steps) * dt_s,
         controls=controls,
+    )
+
+
+def rollout_agent_plan_then_track(
+    env: AMRBicycleEnv,
+    agent: DQNFamilyAgent,
+    *,
+    max_steps: int,
+    seed: int,
+    reset_options: dict[str, object] | None = None,
+    time_mode: str = "rollout",
+    obs_transform: Callable[[np.ndarray], np.ndarray] | None = None,
+    forest_adm_horizon: int = 15,
+    forest_topk: int = 10,
+    forest_min_od_m: float = 0.0,
+    forest_min_progress_m: float = 1e-4,
+    collect_controls: bool = False,
+    mpc_candidates: int = 256,
+) -> RolloutResult:
+    """Two-phase RL inference: DQN plans a global path, MPC tracks it.
+
+    Phase 1 (planning): ``rollout_agent`` generates waypoints.
+    Phase 2 (tracking): ``rollout_tracked_path_mpc`` follows those waypoints.
+    """
+    # --- Phase 1: DQN planning ---
+    plan_roll = rollout_agent(
+        env,
+        agent,
+        max_steps=max_steps,
+        seed=seed,
+        reset_options=reset_options,
+        time_mode=time_mode,
+        obs_transform=obs_transform,
+        forest_adm_horizon=forest_adm_horizon,
+        forest_topk=forest_topk,
+        forest_min_od_m=forest_min_od_m,
+        forest_min_progress_m=forest_min_progress_m,
+        collect_controls=False,
+    )
+    plan_time = float(plan_roll.compute_time_s)
+    dqn_path = list(plan_roll.path_xy_cells)
+
+    if len(dqn_path) < 2:
+        return RolloutResult(
+            path_xy_cells=dqn_path,
+            compute_time_s=plan_time,
+            reached=False,
+            steps=0,
+            path_time_s=0.0,
+            planning_time_s=plan_time,
+            tracking_time_s=0.0,
+        )
+
+    # --- Phase 2: MPC tracking ---
+    # Build reset options to restore exact same start/goal.
+    sx, sy = int(env.start_xy[0]), int(env.start_xy[1])
+    gx, gy = int(env.goal_xy[0]), int(env.goal_xy[1])
+    track_opts: dict[str, object] = dict(reset_options) if reset_options else {}
+    track_opts["start_xy"] = (sx, sy)
+    track_opts["goal_xy"] = (gx, gy)
+
+    track_roll = rollout_tracked_path_mpc(
+        env,
+        dqn_path,
+        max_steps=max_steps,
+        seed=seed + 50_000,
+        reset_options=track_opts,
+        time_mode=time_mode,
+        collect_controls=collect_controls,
+        n_candidates=mpc_candidates,
+    )
+    track_time = float(track_roll.compute_time_s)
+
+    return RolloutResult(
+        path_xy_cells=track_roll.path_xy_cells,
+        compute_time_s=plan_time + track_time,
+        reached=track_roll.reached,
+        steps=track_roll.steps,
+        path_time_s=track_roll.path_time_s,
+        controls=track_roll.controls,
+        planning_time_s=plan_time,
+        tracking_time_s=track_time,
     )
 
 
@@ -769,6 +853,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Forest-only: minimum clearance (OD) required by admissible-action gating.",
     )
     ap.add_argument(
+        "--rl-mpc-track",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Forest-only: when enabled, RL algorithms first generate a global path "
+            "(DQN planning), then MPC tracks it (like baselines). "
+            "Separates planning_time (DQN) and tracking_time (MPC). Default: disabled."
+        ),
+    )
+    ap.add_argument(
         "--forest-baseline-rollout",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -914,7 +1008,7 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     if int(getattr(args, "plot_run_idx", 0)) < 0:
         raise SystemExit("--plot-run-idx must be >= 0")
-    forest_envs = set(FOREST_ENV_ORDER)
+    forest_envs = set(FOREST_ENV_ORDER) | set(REALMAP_ENV_ORDER)
     if int(args.max_steps) == 300 and args.envs and all(str(e) in forest_envs for e in args.envs):
         args.max_steps = 600
     canonical_all = ("mlp-dqn", "mlp-ddqn", "mlp-pddqn", "cnn-dqn", "cnn-ddqn", "cnn-pddqn")
@@ -1108,7 +1202,7 @@ def main(argv: list[str] | None = None) -> int:
             rand_max_cost_m = float(getattr(args, "rand_long_max_cost_m", rand_max_cost_m))
 
         spec = get_map_spec(env_base)
-        if env_base in FOREST_ENV_ORDER:
+        if env_base in FOREST_ENV_ORDER or env_base in REALMAP_ENV_ORDER:
             env = AMRBicycleEnv(
                 spec,
                 max_steps=args.max_steps,
@@ -1402,8 +1496,19 @@ def main(argv: list[str] | None = None) -> int:
 
                 algo_kpis: list[KPI] = []
                 algo_times: list[float] = []
+                algo_plan_times: list[float] = []
+                algo_track_times: list[float] = []
                 algo_success = 0
+                _use_mpc = bool(getattr(args, "rl_mpc_track", False)) and isinstance(env, AMRBicycleEnv)
+                # When --rl-mpc-track: also accumulate "+MPC" variant
+                mpc_kpis: list[KPI] = []
+                mpc_times: list[float] = []
+                mpc_plan_times: list[float] = []
+                mpc_track_times: list[float] = []
+                mpc_success = 0
+                pretty_mpc = pretty + "+MPC"
                 for i in range(int(args.runs)):
+                    # --- RL direct control (always) ---
                     roll = rollout_agent(
                         env,
                         agents[algo_key],
@@ -1419,6 +1524,8 @@ def main(argv: list[str] | None = None) -> int:
                         collect_controls=bool(int(i) in control_run_indices),
                     )
                     algo_times.append(float(roll.compute_time_s))
+                    algo_plan_times.append(float(roll.compute_time_s))
+                    algo_track_times.append(0.0)
                     if int(i) in path_run_indices:
                         env_paths_by_run[int(i)][pretty] = PathTrace(path_xy_cells=roll.path_xy_cells, success=bool(roll.reached))
                     if roll.controls is not None and int(i) in control_run_indices:
@@ -1466,13 +1573,69 @@ def main(argv: list[str] | None = None) -> int:
                         env_pbar.set_postfix_str(f"{pretty} run {int(i) + 1}/{int(args.runs)}")
                         env_pbar.update(1)
 
+                    # --- RL+MPC variant (when --rl-mpc-track) ---
+                    if _use_mpc:
+                        mpc_roll = rollout_agent_plan_then_track(
+                            env,
+                            agents[algo_key],
+                            max_steps=args.max_steps,
+                            seed=int(args.seed) + seed_base + int(i),
+                            reset_options=reset_options_list[i] if i < len(reset_options_list) else None,
+                            time_mode=str(getattr(args, "kpi_time_mode", "rollout")),
+                            obs_transform=obs_transform,
+                            forest_adm_horizon=int(args.forest_adm_horizon),
+                            forest_topk=int(args.forest_topk),
+                            forest_min_od_m=float(args.forest_min_od_m),
+                            forest_min_progress_m=float(args.forest_min_progress_m),
+                            collect_controls=bool(int(i) in control_run_indices),
+                            mpc_candidates=int(getattr(args, "forest_baseline_mpc_candidates", 256)),
+                        )
+                        mpc_times.append(float(mpc_roll.compute_time_s))
+                        mpc_plan_times.append(float(mpc_roll.planning_time_s) if mpc_roll.planning_time_s else float(mpc_roll.compute_time_s))
+                        mpc_track_times.append(float(mpc_roll.tracking_time_s))
+                        if int(i) in path_run_indices:
+                            env_paths_by_run[int(i)][pretty_mpc] = PathTrace(path_xy_cells=mpc_roll.path_xy_cells, success=bool(mpc_roll.reached))
+                        if mpc_roll.controls is not None and int(i) in control_run_indices:
+                            controls_for_plot.setdefault((env_name, int(i)), {})[str(pretty_mpc)] = mpc_roll.controls
+
+                        mpc_smoothed = smooth_path(mpc_roll.path_xy_cells, iterations=2)
+                        mpc_smoothed_m = [(float(x) * float(cell_size_m), float(y) * float(cell_size_m)) for x, y in mpc_smoothed]
+                        mpc_run_kpi = KPI(
+                            avg_path_length=float(path_length(mpc_smoothed)) * float(cell_size_m),
+                            path_time_s=float(mpc_roll.path_time_s),
+                            avg_curvature_1_m=float(avg_abs_curvature(mpc_smoothed_m)),
+                            planning_time_s=float(mpc_roll.planning_time_s) if mpc_roll.planning_time_s else float(mpc_roll.compute_time_s),
+                            tracking_time_s=float(mpc_roll.tracking_time_s),
+                            inference_time_s=float(mpc_roll.compute_time_s),
+                            num_corners=float(num_path_corners(mpc_roll.path_xy_cells, angle_threshold_deg=13.0)),
+                            max_corner_deg=float(max_corner_degree(mpc_smoothed)),
+                        )
+                        rows_runs.append(
+                            {
+                                "Environment": str(env_label),
+                                "Algorithm": str(pretty_mpc),
+                                "run_idx": int(i),
+                                "start_x": int(start_xy[0]),
+                                "start_y": int(start_xy[1]),
+                                "goal_x": int(goal_xy[0]),
+                                "goal_y": int(goal_xy[1]),
+                                "success_rate": 1.0 if bool(mpc_roll.reached) else 0.0,
+                                **dict(mpc_run_kpi.__dict__),
+                            }
+                        )
+                        if bool(mpc_roll.reached):
+                            mpc_success += 1
+                            mpc_kpis.append(mpc_run_kpi)
+                        if env_pbar is not None:
+                            env_pbar.set_postfix_str(f"{pretty_mpc} run {int(i) + 1}/{int(args.runs)}")
+                            env_pbar.update(1)
+
                 k = mean_kpi(algo_kpis)
                 k_dict = dict(k.__dict__)
                 if algo_times:
-                    mean_plan = float(np.mean(algo_times))
-                    k_dict["planning_time_s"] = mean_plan
-                    k_dict["tracking_time_s"] = 0.0
-                    k_dict["inference_time_s"] = mean_plan
+                    k_dict["planning_time_s"] = float(np.mean(algo_plan_times))
+                    k_dict["tracking_time_s"] = float(np.mean(algo_track_times))
+                    k_dict["inference_time_s"] = float(np.mean(algo_times))
                 rows.append(
                     {
                         "Environment": str(env_label),
@@ -1482,10 +1645,27 @@ def main(argv: list[str] | None = None) -> int:
                     }
                 )
 
+                # Append RL+MPC mean row
+                if _use_mpc:
+                    mk = mean_kpi(mpc_kpis)
+                    mk_dict = dict(mk.__dict__)
+                    if mpc_times:
+                        mk_dict["planning_time_s"] = float(np.mean(mpc_plan_times))
+                        mk_dict["tracking_time_s"] = float(np.mean(mpc_track_times))
+                        mk_dict["inference_time_s"] = float(np.mean(mpc_times))
+                    rows.append(
+                        {
+                            "Environment": str(env_label),
+                            "Algorithm": str(pretty_mpc),
+                            "success_rate": float(mpc_success) / float(max(1, int(args.runs))),
+                            **mk_dict,
+                        }
+                    )
+
         if baselines:
             grid_map = grid_map_from_obstacles(grid_y0_bottom=grid, cell_size_m=float(cell_size_m))
             params = default_ackermann_params()
-            if env_base in FOREST_ENV_ORDER and isinstance(env, AMRBicycleEnv):
+            if (env_base in FOREST_ENV_ORDER or env_base in REALMAP_ENV_ORDER) and isinstance(env, AMRBicycleEnv):
                 footprint = forest_two_circle_footprint()
                 goal_xy_tol_m = float(env.goal_tolerance_m)
                 goal_theta_tol_rad = float(env.goal_angle_tolerance_rad)
@@ -1510,6 +1690,13 @@ def main(argv: list[str] | None = None) -> int:
                 ha_track_times: list[float] = []
                 ha_total_times: list[float] = []
                 ha_success = 0
+                _ha_split = bool(getattr(args, "rl_mpc_track", False)) and isinstance(env, AMRBicycleEnv) and bool(getattr(args, "forest_baseline_rollout", False))
+                # When split mode: separate plan-only and plan+MPC accumulators
+                ha_mpc_kpis: list[KPI] = []
+                ha_mpc_plan_times: list[float] = []
+                ha_mpc_track_times: list[float] = []
+                ha_mpc_total_times: list[float] = []
+                ha_mpc_success = 0
 
                 n_runs = int(args.runs) if use_random_pairs else 1
                 for i in range(n_runs):
@@ -1530,72 +1717,181 @@ def main(argv: list[str] | None = None) -> int:
                             timeout_s=float(args.baseline_timeout),
                             max_nodes=int(args.hybrid_max_nodes),
                         )
-                    ha_exec_path = list(res.path_xy_cells)
-                    ha_reached = bool(res.success)
-                    ha_track_time_s = 0.0
-                    ha_path_time_s = float("nan")
-                    if bool(res.success) and isinstance(env, AMRBicycleEnv) and bool(getattr(args, "forest_baseline_rollout", False)):
-                        trace_path = None
-                        if bool(getattr(args, "forest_baseline_save_traces", False)):
-                            trace_path = out_dir / "traces" / f"{_safe_slug(env_case)}__Hybrid_A__run{int(i)}.csv"
-                        roll = rollout_tracked_path_mpc(
-                            env,
-                            ha_exec_path,
-                            max_steps=args.max_steps,
-                            seed=args.seed + 30_000 + i,
-                            reset_options=r_opts,
-                            time_mode=str(getattr(args, "kpi_time_mode", "policy")),
-                            trace_path=trace_path,
-                            n_candidates=int(getattr(args, "forest_baseline_mpc_candidates", 256)),
-                            collect_controls=bool(int(i) in control_run_indices),
+
+                    if _ha_split:
+                        # --- Plan-only row ("Hybrid A*") ---
+                        plan_path = list(res.path_xy_cells)
+                        plan_reached = bool(res.success)
+                        plan_smoothed = smooth_path(plan_path, iterations=2)
+                        plan_smoothed_m = [(float(x) * float(cell_size_m), float(y) * float(cell_size_m)) for x, y in plan_smoothed]
+                        plan_path_time = float(path_length(plan_smoothed_m)) / max(1e-9, float(env.model.v_max_m_s)) if isinstance(env, AMRBicycleEnv) else 0.0
+                        plan_kpi = KPI(
+                            avg_path_length=float(path_length(plan_smoothed)) * float(cell_size_m),
+                            path_time_s=plan_path_time,
+                            avg_curvature_1_m=float(avg_abs_curvature(plan_smoothed_m)),
+                            planning_time_s=float(res.time_s),
+                            tracking_time_s=0.0,
+                            inference_time_s=float(res.time_s),
+                            num_corners=float(num_path_corners(plan_path, angle_threshold_deg=13.0)),
+                            max_corner_deg=float(max_corner_degree(plan_smoothed)),
                         )
-                        ha_exec_path = list(roll.path_xy_cells)
-                        ha_track_time_s = float(roll.compute_time_s)
-                        ha_reached = bool(roll.reached)
-                        ha_path_time_s = float(roll.path_time_s)
-                        if int(i) in control_run_indices and roll.controls is not None:
-                            controls_for_plot.setdefault((env_name, int(i)), {})["Hybrid A*"] = roll.controls
+                        ha_plan_times.append(float(res.time_s))
+                        ha_track_times.append(0.0)
+                        ha_total_times.append(float(res.time_s))
+                        if int(i) in path_run_indices:
+                            env_paths_by_run[int(i)]["Hybrid A*"] = PathTrace(path_xy_cells=plan_path, success=plan_reached)
+                        rows_runs.append(
+                            {
+                                "Environment": str(env_label),
+                                "Algorithm": "Hybrid A*",
+                                "run_idx": int(i),
+                                "start_x": int(start_xy[0]),
+                                "start_y": int(start_xy[1]),
+                                "goal_x": int(goal_xy[0]),
+                                "goal_y": int(goal_xy[1]),
+                                "success_rate": 1.0 if plan_reached else 0.0,
+                                **dict(plan_kpi.__dict__),
+                            }
+                        )
+                        if plan_reached and plan_path:
+                            ha_success += 1
+                            ha_kpis.append(plan_kpi)
+                        if env_pbar is not None:
+                            env_pbar.set_postfix_str(f"Hybrid A* run {int(i) + 1}/{int(n_runs)}")
+                            env_pbar.update(1)
 
-                    ha_plan_times.append(float(res.time_s))
-                    ha_track_times.append(float(ha_track_time_s))
-                    ha_total_times.append(float(res.time_s) + float(ha_track_time_s))
-                    if int(i) in path_run_indices:
-                        env_paths_by_run[int(i)]["Hybrid A*"] = PathTrace(path_xy_cells=ha_exec_path, success=bool(ha_reached))
+                        # --- Plan+MPC row ("Hybrid A*+MPC") ---
+                        if bool(res.success):
+                            trace_path = None
+                            if bool(getattr(args, "forest_baseline_save_traces", False)):
+                                trace_path = out_dir / "traces" / f"{_safe_slug(env_case)}__Hybrid_A__run{int(i)}.csv"
+                            roll = rollout_tracked_path_mpc(
+                                env,
+                                list(res.path_xy_cells),
+                                max_steps=args.max_steps,
+                                seed=args.seed + 30_000 + i,
+                                reset_options=r_opts,
+                                time_mode=str(getattr(args, "kpi_time_mode", "policy")),
+                                trace_path=trace_path,
+                                n_candidates=int(getattr(args, "forest_baseline_mpc_candidates", 256)),
+                                collect_controls=bool(int(i) in control_run_indices),
+                            )
+                            mpc_exec_path = list(roll.path_xy_cells)
+                            mpc_reached = bool(roll.reached)
+                            mpc_track_t = float(roll.compute_time_s)
+                            mpc_path_t = float(roll.path_time_s)
+                            if int(i) in control_run_indices and roll.controls is not None:
+                                controls_for_plot.setdefault((env_name, int(i)), {})["Hybrid A*+MPC"] = roll.controls
+                        else:
+                            mpc_exec_path = list(res.path_xy_cells)
+                            mpc_reached = False
+                            mpc_track_t = 0.0
+                            mpc_path_t = plan_path_time
+                        mpc_smoothed = smooth_path(mpc_exec_path, iterations=2)
+                        mpc_smoothed_m = [(float(x) * float(cell_size_m), float(y) * float(cell_size_m)) for x, y in mpc_smoothed]
+                        mpc_kpi = KPI(
+                            avg_path_length=float(path_length(mpc_smoothed)) * float(cell_size_m),
+                            path_time_s=mpc_path_t,
+                            avg_curvature_1_m=float(avg_abs_curvature(mpc_smoothed_m)),
+                            planning_time_s=float(res.time_s),
+                            tracking_time_s=mpc_track_t,
+                            inference_time_s=float(res.time_s) + mpc_track_t,
+                            num_corners=float(num_path_corners(mpc_exec_path, angle_threshold_deg=13.0)),
+                            max_corner_deg=float(max_corner_degree(mpc_smoothed)),
+                        )
+                        ha_mpc_plan_times.append(float(res.time_s))
+                        ha_mpc_track_times.append(mpc_track_t)
+                        ha_mpc_total_times.append(float(res.time_s) + mpc_track_t)
+                        if int(i) in path_run_indices:
+                            env_paths_by_run[int(i)]["Hybrid A*+MPC"] = PathTrace(path_xy_cells=mpc_exec_path, success=mpc_reached)
+                        rows_runs.append(
+                            {
+                                "Environment": str(env_label),
+                                "Algorithm": "Hybrid A*+MPC",
+                                "run_idx": int(i),
+                                "start_x": int(start_xy[0]),
+                                "start_y": int(start_xy[1]),
+                                "goal_x": int(goal_xy[0]),
+                                "goal_y": int(goal_xy[1]),
+                                "success_rate": 1.0 if mpc_reached else 0.0,
+                                **dict(mpc_kpi.__dict__),
+                            }
+                        )
+                        if mpc_reached and mpc_exec_path:
+                            ha_mpc_success += 1
+                            ha_mpc_kpis.append(mpc_kpi)
+                        if env_pbar is not None:
+                            env_pbar.set_postfix_str(f"Hybrid A*+MPC run {int(i) + 1}/{int(n_runs)}")
+                            env_pbar.update(1)
 
-                    raw_corners = float(num_path_corners(ha_exec_path, angle_threshold_deg=13.0))
-                    smoothed = smooth_path(ha_exec_path, iterations=2)
-                    smoothed_m = [(float(x) * float(cell_size_m), float(y) * float(cell_size_m)) for x, y in smoothed]
-                    if not math.isfinite(float(ha_path_time_s)) and isinstance(env, AMRBicycleEnv):
-                        ha_path_time_s = float(path_length(smoothed_m)) / max(1e-9, float(env.model.v_max_m_s))
-                    run_kpi = KPI(
-                        avg_path_length=float(path_length(smoothed)) * float(cell_size_m),
-                        path_time_s=float(ha_path_time_s),
-                        avg_curvature_1_m=float(avg_abs_curvature(smoothed_m)),
-                        planning_time_s=float(res.time_s),
-                        tracking_time_s=float(ha_track_time_s),
-                        inference_time_s=float(res.time_s) + float(ha_track_time_s),
-                        num_corners=raw_corners,
-                        max_corner_deg=float(max_corner_degree(smoothed)),
-                    )
-                    rows_runs.append(
-                        {
-                            "Environment": str(env_label),
-                            "Algorithm": "Hybrid A*",
-                            "run_idx": int(i),
-                            "start_x": int(start_xy[0]),
-                            "start_y": int(start_xy[1]),
-                            "goal_x": int(goal_xy[0]),
-                            "goal_y": int(goal_xy[1]),
-                            "success_rate": 1.0 if bool(ha_reached) else 0.0,
-                            **dict(run_kpi.__dict__),
-                        }
-                    )
-                    if bool(ha_reached) and ha_exec_path:
-                        ha_success += 1
-                        ha_kpis.append(run_kpi)
-                    if env_pbar is not None:
-                        env_pbar.set_postfix_str(f"Hybrid A* run {int(i) + 1}/{int(n_runs)}")
-                        env_pbar.update(1)
+                    else:
+                        # --- Original single-row mode (no split) ---
+                        ha_exec_path = list(res.path_xy_cells)
+                        ha_reached = bool(res.success)
+                        ha_track_time_s = 0.0
+                        ha_path_time_s = float("nan")
+                        if bool(res.success) and isinstance(env, AMRBicycleEnv) and bool(getattr(args, "forest_baseline_rollout", False)):
+                            trace_path = None
+                            if bool(getattr(args, "forest_baseline_save_traces", False)):
+                                trace_path = out_dir / "traces" / f"{_safe_slug(env_case)}__Hybrid_A__run{int(i)}.csv"
+                            roll = rollout_tracked_path_mpc(
+                                env,
+                                ha_exec_path,
+                                max_steps=args.max_steps,
+                                seed=args.seed + 30_000 + i,
+                                reset_options=r_opts,
+                                time_mode=str(getattr(args, "kpi_time_mode", "policy")),
+                                trace_path=trace_path,
+                                n_candidates=int(getattr(args, "forest_baseline_mpc_candidates", 256)),
+                                collect_controls=bool(int(i) in control_run_indices),
+                            )
+                            ha_exec_path = list(roll.path_xy_cells)
+                            ha_track_time_s = float(roll.compute_time_s)
+                            ha_reached = bool(roll.reached)
+                            ha_path_time_s = float(roll.path_time_s)
+                            if int(i) in control_run_indices and roll.controls is not None:
+                                controls_for_plot.setdefault((env_name, int(i)), {})["Hybrid A*"] = roll.controls
+
+                        ha_plan_times.append(float(res.time_s))
+                        ha_track_times.append(float(ha_track_time_s))
+                        ha_total_times.append(float(res.time_s) + float(ha_track_time_s))
+                        if int(i) in path_run_indices:
+                            env_paths_by_run[int(i)]["Hybrid A*"] = PathTrace(path_xy_cells=ha_exec_path, success=bool(ha_reached))
+
+                        raw_corners = float(num_path_corners(ha_exec_path, angle_threshold_deg=13.0))
+                        smoothed = smooth_path(ha_exec_path, iterations=2)
+                        smoothed_m = [(float(x) * float(cell_size_m), float(y) * float(cell_size_m)) for x, y in smoothed]
+                        if not math.isfinite(float(ha_path_time_s)) and isinstance(env, AMRBicycleEnv):
+                            ha_path_time_s = float(path_length(smoothed_m)) / max(1e-9, float(env.model.v_max_m_s))
+                        run_kpi = KPI(
+                            avg_path_length=float(path_length(smoothed)) * float(cell_size_m),
+                            path_time_s=float(ha_path_time_s),
+                            avg_curvature_1_m=float(avg_abs_curvature(smoothed_m)),
+                            planning_time_s=float(res.time_s),
+                            tracking_time_s=float(ha_track_time_s),
+                            inference_time_s=float(res.time_s) + float(ha_track_time_s),
+                            num_corners=raw_corners,
+                            max_corner_deg=float(max_corner_degree(smoothed)),
+                        )
+                        rows_runs.append(
+                            {
+                                "Environment": str(env_label),
+                                "Algorithm": "Hybrid A*",
+                                "run_idx": int(i),
+                                "start_x": int(start_xy[0]),
+                                "start_y": int(start_xy[1]),
+                                "goal_x": int(goal_xy[0]),
+                                "goal_y": int(goal_xy[1]),
+                                "success_rate": 1.0 if bool(ha_reached) else 0.0,
+                                **dict(run_kpi.__dict__),
+                            }
+                        )
+                        if bool(ha_reached) and ha_exec_path:
+                            ha_success += 1
+                            ha_kpis.append(run_kpi)
+                        if env_pbar is not None:
+                            env_pbar.set_postfix_str(f"Hybrid A* run {int(i) + 1}/{int(n_runs)}")
+                            env_pbar.update(1)
 
                 k = mean_kpi(ha_kpis)
                 k_dict = dict(k.__dict__)
@@ -1613,6 +1909,24 @@ def main(argv: list[str] | None = None) -> int:
                         **k_dict,
                     }
                 )
+                # Append Hybrid A*+MPC mean row
+                if _ha_split:
+                    mk = mean_kpi(ha_mpc_kpis)
+                    mk_dict = dict(mk.__dict__)
+                    if ha_mpc_plan_times:
+                        mk_dict["planning_time_s"] = float(np.mean(ha_mpc_plan_times))
+                    if ha_mpc_track_times:
+                        mk_dict["tracking_time_s"] = float(np.mean(ha_mpc_track_times))
+                    if ha_mpc_total_times:
+                        mk_dict["inference_time_s"] = float(np.mean(ha_mpc_total_times))
+                    rows.append(
+                        {
+                            "Environment": str(env_label),
+                            "Algorithm": "Hybrid A*+MPC",
+                            "success_rate": float(ha_mpc_success) / float(max(1, int(n_runs))),
+                            **mk_dict,
+                        }
+                    )
 
             if "rrt_star" in baselines:
                 rrt_kpis: list[KPI] = []
@@ -1620,6 +1934,13 @@ def main(argv: list[str] | None = None) -> int:
                 rrt_track_times: list[float] = []
                 rrt_total_times: list[float] = []
                 rrt_success = 0
+                _rrt_split = bool(getattr(args, "rl_mpc_track", False)) and isinstance(env, AMRBicycleEnv) and bool(getattr(args, "forest_baseline_rollout", False))
+                rrt_mpc_kpis: list[KPI] = []
+                rrt_mpc_plan_times: list[float] = []
+                rrt_mpc_track_times: list[float] = []
+                rrt_mpc_total_times: list[float] = []
+                rrt_mpc_success = 0
+
                 for i in range(args.runs):
                     start_xy, goal_xy, r_opts = pair_for_run(int(i))
                     res = plan_rrt_star(
@@ -1636,72 +1957,180 @@ def main(argv: list[str] | None = None) -> int:
                         max_iter=int(args.rrt_max_iter),
                         seed=args.seed + 30_000 + i,
                     )
-                    exec_path = list(res.path_xy_cells)
-                    reached = bool(res.success)
-                    track_time_s = 0.0
-                    path_time_s = float("nan")
-                    if bool(res.success) and isinstance(env, AMRBicycleEnv) and bool(getattr(args, "forest_baseline_rollout", False)):
-                        trace_path = None
-                        if bool(getattr(args, "forest_baseline_save_traces", False)):
-                            trace_path = out_dir / "traces" / f"{_safe_slug(env_case)}__RRT__run{int(i)}.csv"
-                        roll = rollout_tracked_path_mpc(
-                            env,
-                            exec_path,
-                            max_steps=args.max_steps,
-                            seed=args.seed + 40_000 + i,
-                            reset_options=r_opts,
-                            time_mode=str(getattr(args, "kpi_time_mode", "policy")),
-                            trace_path=trace_path,
-                            n_candidates=int(getattr(args, "forest_baseline_mpc_candidates", 256)),
-                            collect_controls=bool(int(i) in control_run_indices),
+                    if _rrt_split:
+                        # --- Plan-only row ("RRT*") ---
+                        plan_path = list(res.path_xy_cells)
+                        plan_reached = bool(res.success)
+                        plan_smoothed = smooth_path(plan_path, iterations=2)
+                        plan_smoothed_m = [(float(x) * float(cell_size_m), float(y) * float(cell_size_m)) for x, y in plan_smoothed]
+                        plan_path_time = float(path_length(plan_smoothed_m)) / max(1e-9, float(env.model.v_max_m_s)) if isinstance(env, AMRBicycleEnv) else 0.0
+                        plan_kpi = KPI(
+                            avg_path_length=float(path_length(plan_smoothed)) * float(cell_size_m),
+                            path_time_s=plan_path_time,
+                            avg_curvature_1_m=float(avg_abs_curvature(plan_smoothed_m)),
+                            planning_time_s=float(res.time_s),
+                            tracking_time_s=0.0,
+                            inference_time_s=float(res.time_s),
+                            num_corners=float(num_path_corners(plan_path, angle_threshold_deg=13.0)),
+                            max_corner_deg=float(max_corner_degree(plan_smoothed)),
                         )
-                        exec_path = list(roll.path_xy_cells)
-                        track_time_s = float(roll.compute_time_s)
-                        reached = bool(roll.reached)
-                        path_time_s = float(roll.path_time_s)
-                        if int(i) in control_run_indices and roll.controls is not None:
-                            controls_for_plot.setdefault((env_name, int(i)), {})["RRT*"] = roll.controls
+                        rrt_plan_times.append(float(res.time_s))
+                        rrt_track_times.append(0.0)
+                        rrt_total_times.append(float(res.time_s))
+                        if int(i) in path_run_indices:
+                            env_paths_by_run[int(i)]["RRT*"] = PathTrace(path_xy_cells=plan_path, success=plan_reached)
+                        rows_runs.append(
+                            {
+                                "Environment": str(env_label),
+                                "Algorithm": "RRT*",
+                                "run_idx": int(i),
+                                "start_x": int(start_xy[0]),
+                                "start_y": int(start_xy[1]),
+                                "goal_x": int(goal_xy[0]),
+                                "goal_y": int(goal_xy[1]),
+                                "success_rate": 1.0 if plan_reached else 0.0,
+                                **dict(plan_kpi.__dict__),
+                            }
+                        )
+                        if plan_reached and plan_path:
+                            rrt_success += 1
+                            rrt_kpis.append(plan_kpi)
+                        if env_pbar is not None:
+                            env_pbar.set_postfix_str(f"RRT* run {int(i) + 1}/{int(args.runs)}")
+                            env_pbar.update(1)
 
-                    rrt_plan_times.append(float(res.time_s))
-                    rrt_track_times.append(float(track_time_s))
-                    rrt_total_times.append(float(res.time_s) + float(track_time_s))
-                    if int(i) in path_run_indices:
-                        env_paths_by_run[int(i)]["RRT*"] = PathTrace(path_xy_cells=exec_path, success=bool(reached))
+                        # --- Plan+MPC row ("RRT*+MPC") ---
+                        if bool(res.success):
+                            trace_path = None
+                            if bool(getattr(args, "forest_baseline_save_traces", False)):
+                                trace_path = out_dir / "traces" / f"{_safe_slug(env_case)}__RRT__run{int(i)}.csv"
+                            roll = rollout_tracked_path_mpc(
+                                env,
+                                list(res.path_xy_cells),
+                                max_steps=args.max_steps,
+                                seed=args.seed + 40_000 + i,
+                                reset_options=r_opts,
+                                time_mode=str(getattr(args, "kpi_time_mode", "policy")),
+                                trace_path=trace_path,
+                                n_candidates=int(getattr(args, "forest_baseline_mpc_candidates", 256)),
+                                collect_controls=bool(int(i) in control_run_indices),
+                            )
+                            mpc_exec_path = list(roll.path_xy_cells)
+                            mpc_reached = bool(roll.reached)
+                            mpc_track_t = float(roll.compute_time_s)
+                            mpc_path_t = float(roll.path_time_s)
+                            if int(i) in control_run_indices and roll.controls is not None:
+                                controls_for_plot.setdefault((env_name, int(i)), {})["RRT*+MPC"] = roll.controls
+                        else:
+                            mpc_exec_path = list(res.path_xy_cells)
+                            mpc_reached = False
+                            mpc_track_t = 0.0
+                            mpc_path_t = plan_path_time
+                        mpc_smoothed = smooth_path(mpc_exec_path, iterations=2)
+                        mpc_smoothed_m = [(float(x) * float(cell_size_m), float(y) * float(cell_size_m)) for x, y in mpc_smoothed]
+                        mpc_kpi = KPI(
+                            avg_path_length=float(path_length(mpc_smoothed)) * float(cell_size_m),
+                            path_time_s=mpc_path_t,
+                            avg_curvature_1_m=float(avg_abs_curvature(mpc_smoothed_m)),
+                            planning_time_s=float(res.time_s),
+                            tracking_time_s=mpc_track_t,
+                            inference_time_s=float(res.time_s) + mpc_track_t,
+                            num_corners=float(num_path_corners(mpc_exec_path, angle_threshold_deg=13.0)),
+                            max_corner_deg=float(max_corner_degree(mpc_smoothed)),
+                        )
+                        rrt_mpc_plan_times.append(float(res.time_s))
+                        rrt_mpc_track_times.append(mpc_track_t)
+                        rrt_mpc_total_times.append(float(res.time_s) + mpc_track_t)
+                        if int(i) in path_run_indices:
+                            env_paths_by_run[int(i)]["RRT*+MPC"] = PathTrace(path_xy_cells=mpc_exec_path, success=mpc_reached)
+                        rows_runs.append(
+                            {
+                                "Environment": str(env_label),
+                                "Algorithm": "RRT*+MPC",
+                                "run_idx": int(i),
+                                "start_x": int(start_xy[0]),
+                                "start_y": int(start_xy[1]),
+                                "goal_x": int(goal_xy[0]),
+                                "goal_y": int(goal_xy[1]),
+                                "success_rate": 1.0 if mpc_reached else 0.0,
+                                **dict(mpc_kpi.__dict__),
+                            }
+                        )
+                        if mpc_reached and mpc_exec_path:
+                            rrt_mpc_success += 1
+                            rrt_mpc_kpis.append(mpc_kpi)
+                        if env_pbar is not None:
+                            env_pbar.set_postfix_str(f"RRT*+MPC run {int(i) + 1}/{int(args.runs)}")
+                            env_pbar.update(1)
 
-                    raw_corners = float(num_path_corners(exec_path, angle_threshold_deg=13.0))
-                    smoothed = smooth_path(exec_path, iterations=2)
-                    smoothed_m = [(float(x) * float(cell_size_m), float(y) * float(cell_size_m)) for x, y in smoothed]
-                    if not math.isfinite(float(path_time_s)) and isinstance(env, AMRBicycleEnv):
-                        path_time_s = float(path_length(smoothed_m)) / max(1e-9, float(env.model.v_max_m_s))
-                    run_kpi = KPI(
-                        avg_path_length=float(path_length(smoothed)) * float(cell_size_m),
-                        path_time_s=float(path_time_s),
-                        avg_curvature_1_m=float(avg_abs_curvature(smoothed_m)),
-                        planning_time_s=float(res.time_s),
-                        tracking_time_s=float(track_time_s),
-                        inference_time_s=float(res.time_s) + float(track_time_s),
-                        num_corners=raw_corners,
-                        max_corner_deg=float(max_corner_degree(smoothed)),
-                    )
-                    rows_runs.append(
-                        {
-                            "Environment": str(env_label),
-                            "Algorithm": "RRT*",
-                            "run_idx": int(i),
-                            "start_x": int(start_xy[0]),
-                            "start_y": int(start_xy[1]),
-                            "goal_x": int(goal_xy[0]),
-                            "goal_y": int(goal_xy[1]),
-                            "success_rate": 1.0 if bool(reached) else 0.0,
-                            **dict(run_kpi.__dict__),
-                        }
-                    )
-                    if bool(reached) and exec_path:
-                        rrt_success += 1
-                        rrt_kpis.append(run_kpi)
-                    if env_pbar is not None:
-                        env_pbar.set_postfix_str(f"RRT* run {int(i) + 1}/{int(args.runs)}")
-                        env_pbar.update(1)
+                    else:
+                        # --- Original single-row mode (no split) ---
+                        exec_path = list(res.path_xy_cells)
+                        reached = bool(res.success)
+                        track_time_s = 0.0
+                        path_time_s = float("nan")
+                        if bool(res.success) and isinstance(env, AMRBicycleEnv) and bool(getattr(args, "forest_baseline_rollout", False)):
+                            trace_path = None
+                            if bool(getattr(args, "forest_baseline_save_traces", False)):
+                                trace_path = out_dir / "traces" / f"{_safe_slug(env_case)}__RRT__run{int(i)}.csv"
+                            roll = rollout_tracked_path_mpc(
+                                env,
+                                exec_path,
+                                max_steps=args.max_steps,
+                                seed=args.seed + 40_000 + i,
+                                reset_options=r_opts,
+                                time_mode=str(getattr(args, "kpi_time_mode", "policy")),
+                                trace_path=trace_path,
+                                n_candidates=int(getattr(args, "forest_baseline_mpc_candidates", 256)),
+                                collect_controls=bool(int(i) in control_run_indices),
+                            )
+                            exec_path = list(roll.path_xy_cells)
+                            track_time_s = float(roll.compute_time_s)
+                            reached = bool(roll.reached)
+                            path_time_s = float(roll.path_time_s)
+                            if int(i) in control_run_indices and roll.controls is not None:
+                                controls_for_plot.setdefault((env_name, int(i)), {})["RRT*"] = roll.controls
+
+                        rrt_plan_times.append(float(res.time_s))
+                        rrt_track_times.append(float(track_time_s))
+                        rrt_total_times.append(float(res.time_s) + float(track_time_s))
+                        if int(i) in path_run_indices:
+                            env_paths_by_run[int(i)]["RRT*"] = PathTrace(path_xy_cells=exec_path, success=bool(reached))
+
+                        raw_corners = float(num_path_corners(exec_path, angle_threshold_deg=13.0))
+                        smoothed = smooth_path(exec_path, iterations=2)
+                        smoothed_m = [(float(x) * float(cell_size_m), float(y) * float(cell_size_m)) for x, y in smoothed]
+                        if not math.isfinite(float(path_time_s)) and isinstance(env, AMRBicycleEnv):
+                            path_time_s = float(path_length(smoothed_m)) / max(1e-9, float(env.model.v_max_m_s))
+                        run_kpi = KPI(
+                            avg_path_length=float(path_length(smoothed)) * float(cell_size_m),
+                            path_time_s=float(path_time_s),
+                            avg_curvature_1_m=float(avg_abs_curvature(smoothed_m)),
+                            planning_time_s=float(res.time_s),
+                            tracking_time_s=float(track_time_s),
+                            inference_time_s=float(res.time_s) + float(track_time_s),
+                            num_corners=raw_corners,
+                            max_corner_deg=float(max_corner_degree(smoothed)),
+                        )
+                        rows_runs.append(
+                            {
+                                "Environment": str(env_label),
+                                "Algorithm": "RRT*",
+                                "run_idx": int(i),
+                                "start_x": int(start_xy[0]),
+                                "start_y": int(start_xy[1]),
+                                "goal_x": int(goal_xy[0]),
+                                "goal_y": int(goal_xy[1]),
+                                "success_rate": 1.0 if bool(reached) else 0.0,
+                                **dict(run_kpi.__dict__),
+                            }
+                        )
+                        if bool(reached) and exec_path:
+                            rrt_success += 1
+                            rrt_kpis.append(run_kpi)
+                        if env_pbar is not None:
+                            env_pbar.set_postfix_str(f"RRT* run {int(i) + 1}/{int(args.runs)}")
+                            env_pbar.update(1)
 
                 k = mean_kpi(rrt_kpis)
                 k_dict = dict(k.__dict__)
@@ -1719,6 +2148,24 @@ def main(argv: list[str] | None = None) -> int:
                         **k_dict,
                     }
                 )
+                # Append RRT*+MPC mean row
+                if _rrt_split:
+                    mk = mean_kpi(rrt_mpc_kpis)
+                    mk_dict = dict(mk.__dict__)
+                    if rrt_mpc_plan_times:
+                        mk_dict["planning_time_s"] = float(np.mean(rrt_mpc_plan_times))
+                    if rrt_mpc_track_times:
+                        mk_dict["tracking_time_s"] = float(np.mean(rrt_mpc_track_times))
+                    if rrt_mpc_total_times:
+                        mk_dict["inference_time_s"] = float(np.mean(rrt_mpc_total_times))
+                    rows.append(
+                        {
+                            "Environment": str(env_label),
+                            "Algorithm": "RRT*+MPC",
+                            "success_rate": float(rrt_mpc_success) / float(max(1, int(args.runs))),
+                            **mk_dict,
+                        }
+                    )
 
         if env_pbar is not None:
             env_pbar.close()
@@ -2094,7 +2541,7 @@ def main(argv: list[str] | None = None) -> int:
         bool(getattr(args, "random_start_goal", False))
         and int(len(args.envs)) == 1
         and int(args.runs) >= 4
-        and str(env0_base) in set(FOREST_ENV_ORDER)
+        and str(env0_base) in set(FOREST_ENV_ORDER) | set(REALMAP_ENV_ORDER)
     )
     if envs_to_plot and multi_pair_fig:
         base = int(getattr(args, "plot_run_idx", 0))
@@ -2103,7 +2550,7 @@ def main(argv: list[str] | None = None) -> int:
         for env_name in envs_to_plot:
             env_base = str(env_name).split("::", 1)[0]
             run_idx = 0
-            if bool(getattr(args, "random_start_goal", False)) and str(env_base) in set(FOREST_ENV_ORDER):
+            if bool(getattr(args, "random_start_goal", False)) and str(env_base) in set(FOREST_ENV_ORDER) | set(REALMAP_ENV_ORDER):
                 run_idx = int(getattr(args, "plot_run_idx", 0))
             panels.append((str(env_name), int(run_idx)))
 

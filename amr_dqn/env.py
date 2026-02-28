@@ -29,6 +29,41 @@ _ACTIONS_8 = np.array(
 )
 
 
+def _downsample_map_preserve_aspect(
+    src: np.ndarray,
+    target_size: int,
+    *,
+    interpolation: int = cv2.INTER_AREA,
+    pad_value: float = 0.0,
+) -> np.ndarray:
+    """Downsample a 2-D map to (target_size, target_size) preserving aspect ratio.
+
+    The longer side is scaled to *target_size*; the shorter side is scaled
+    proportionally and then **bottom-padded** with *pad_value* so the output
+    is always square.  For square inputs the result is identical to a plain
+    ``cv2.resize(..., dsize=(target_size, target_size))``.
+    """
+    h, w = src.shape[:2]
+    n = int(target_size)
+    long_side = max(h, w)
+    scale = float(n) / float(long_side)
+    ds_w = max(1, round(w * scale))
+    ds_h = max(1, round(h * scale))
+    # Clamp to target_size (rounding can overshoot by 1).
+    ds_w = min(ds_w, n)
+    ds_h = min(ds_h, n)
+    resized = cv2.resize(
+        src.astype(np.float32, copy=False),
+        dsize=(int(ds_w), int(ds_h)),
+        interpolation=interpolation,
+    )
+    if ds_h == n and ds_w == n:
+        return resized.astype(np.float32, copy=False)
+    out = np.full((n, n), float(pad_value), dtype=np.float32)
+    out[:ds_h, :ds_w] = resized
+    return out
+
+
 @dataclass(frozen=True)
 class RewardWeights:
     lambda_target: float = 1.0
@@ -73,11 +108,11 @@ class AMRGridEnv(gym.Env):
         self.obs_map_size = int(obs_map_size)
         if self.obs_map_size < 4:
             raise ValueError("obs_map_size must be >= 4")
-        grid_ds = cv2.resize(
+        grid_ds = _downsample_map_preserve_aspect(
             self._grid.astype(np.float32, copy=False),
-            dsize=(int(self.obs_map_size), int(self.obs_map_size)),
-            interpolation=cv2.INTER_NEAREST,
-        ).astype(np.float32, copy=False)
+            int(self.obs_map_size),
+            interpolation=cv2.INTER_NEAREST, pad_value=1.0,
+        )
         self._obs_grid_flat = (2.0 * grid_ds.reshape(-1) - 1.0).astype(np.float32, copy=False)
 
         obs_dim = 5 + int(self.obs_map_size) * int(self.obs_map_size)
@@ -739,29 +774,25 @@ class AMRBicycleEnv(gym.Env):
         #
         # The obstacle grid and cost-to-go field are known in global planning and provide
         # much richer context than sensor-only lidar features.
-        occ_ds = cv2.resize(
-            self._grid.astype(np.float32, copy=False),
-            dsize=(int(self.obs_map_size), int(self.obs_map_size)),
-            interpolation=cv2.INTER_NEAREST,
-        ).astype(np.float32, copy=False)
+        #
+        # Downsample preserving aspect ratio so non-square maps (e.g. 410x129)
+        # keep correct spatial relationships.  Padding uses semantically correct
+        # fill values: occupied=1 for occ, max-cost=1 for cost, zero-clearance=0 for EDT.
+        _n = int(self.obs_map_size)
+        occ_ds = _downsample_map_preserve_aspect(
+            self._grid.astype(np.float32, copy=False), _n,
+            interpolation=cv2.INTER_NEAREST, pad_value=1.0,
+        )
         self._obs_occ_flat = (2.0 * occ_ds.reshape(-1) - 1.0).astype(np.float32, copy=False)
 
         cost = np.minimum(self._cost_to_goal_m, float(self._cost_fill_m)).astype(np.float32, copy=False)
         cost01 = np.clip(cost / max(1e-6, float(self._cost_norm_m)), 0.0, 1.0).astype(np.float32, copy=False)
-        cost_ds = cv2.resize(
-            cost01,
-            dsize=(int(self.obs_map_size), int(self.obs_map_size)),
-            interpolation=cv2.INTER_AREA,
-        ).astype(np.float32, copy=False)
+        cost_ds = _downsample_map_preserve_aspect(cost01, _n, pad_value=1.0)
         self._obs_cost_flat = (2.0 * cost_ds.reshape(-1) - 1.0).astype(np.float32, copy=False)
 
         # EDT clearance map: normalised distance-to-nearest-obstacle, capped at od_cap_m.
         edt01 = np.clip(self._dist_m / max(1e-6, float(self.od_cap_m)), 0.0, 1.0).astype(np.float32, copy=False)
-        edt_ds = cv2.resize(
-            edt01,
-            dsize=(int(self.obs_map_size), int(self.obs_map_size)),
-            interpolation=cv2.INTER_AREA,
-        ).astype(np.float32, copy=False)
+        edt_ds = _downsample_map_preserve_aspect(edt01, _n, pad_value=0.0)
         self._obs_edt_flat = (2.0 * edt_ds.reshape(-1) - 1.0).astype(np.float32, copy=False)
 
         obs_dim = 11 + 3 * int(self.obs_map_size) * int(self.obs_map_size)
@@ -860,11 +891,9 @@ class AMRBicycleEnv(gym.Env):
         # Downsampled cost-to-go field (normalized) for global-map observations.
         cost = np.minimum(self._cost_to_goal_m, float(self._cost_fill_m)).astype(np.float32, copy=False)
         cost01 = np.clip(cost / max(1e-6, float(self._cost_norm_m)), 0.0, 1.0).astype(np.float32, copy=False)
-        cost_ds = cv2.resize(
-            cost01,
-            dsize=(int(self.obs_map_size), int(self.obs_map_size)),
-            interpolation=cv2.INTER_AREA,
-        ).astype(np.float32, copy=False)
+        cost_ds = _downsample_map_preserve_aspect(
+            cost01, int(self.obs_map_size), pad_value=1.0,
+        )
         self._obs_cost_flat = (2.0 * cost_ds.reshape(-1) - 1.0).astype(np.float32, copy=False)
 
     def _sample_random_start_goal(

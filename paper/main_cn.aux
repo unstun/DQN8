@@ -1,0 +1,119 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand*\HyPL@Entry[1]{}
+\citation{dolgov2010path}
+\citation{karaman2011sampling}
+\citation{mnih2015human}
+\citation{van2016deep}
+\citation{lillicrap2015continuous}
+\citation{dolgov2010path}
+\citation{karaman2011sampling}
+\citation{mnih2015human}
+\citation{van2016deep}
+\citation{lillicrap2015continuous}
+\citation{hester2018deep}
+\HyPL@Entry{0<</S/D>>}
+\@writefile{toc}{\contentsline {section}{\numberline {I}引言}{1}{section.1}\protected@file@percent }
+\newlabel{sec:intro}{{I}{1}{引言}{section.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {II}相关工作}{1}{section.2}\protected@file@percent }
+\newlabel{sec:related}{{II}{1}{相关工作}{section.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-A}}经典路径规划}{1}{subsection.2.1}\protected@file@percent }
+\citation{tai2017virtual}
+\citation{xie2018learning}
+\citation{huang2020closer}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-B}}面向导航的深度强化学习}{2}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-C}}RL中的动作掩码与安全机制}{2}{subsection.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {III}问题建模}{2}{section.3}\protected@file@percent }
+\newlabel{sec:problem}{{III}{2}{问题建模}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}车辆模型}{2}{subsection.3.1}\protected@file@percent }
+\newlabel{eq:bicycle}{{1}{2}{车辆模型}{equation.3.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}森林环境}{2}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}MDP建模}{2}{subsection.3.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces 森林环境（\texttt  {forest\_a}）及所有算法的规划路径。左：短距离场景（6--14\,m）；右：长距离场景（42\,m以上）。黑点为树木，彩色线为各算法路径。}}{2}{figure.1}\protected@file@percent }
+\newlabel{fig:env_overview}{{1}{2}{森林环境（\texttt {forest\_a}）及所有算法的规划路径。左：短距离场景（6--14\,m）；右：长距离场景（42\,m以上）。黑点为树木，彩色线为各算法路径。}{figure.1}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces DQN变体规格。}}{2}{table.1}\protected@file@percent }
+\newlabel{tab:variants}{{I}{2}{DQN变体规格。}{table.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {IV}方法论}{2}{section.4}\protected@file@percent }
+\newlabel{sec:method}{{IV}{2}{方法论}{section.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-A}}DQN变体族}{2}{subsection.4.1}\protected@file@percent }
+\newlabel{sec:variants}{{\mbox  {IV-A}}{2}{DQN变体族}{subsection.4.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces CNN Q网络架构。MLP变体省略空间分支，直接展平所有输入。}}{3}{figure.2}\protected@file@percent }
+\newlabel{fig:architecture}{{2}{3}{CNN Q网络架构。MLP变体省略空间分支，直接展平所有输入。}{figure.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-B}}奖励设计}{3}{subsection.4.2}\protected@file@percent }
+\newlabel{sec:reward}{{\mbox  {IV-B}}{3}{奖励设计}{subsection.4.2}{}}
+\newlabel{eq:reward}{{2}{3}{奖励设计}{equation.4.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-C}}四阶段训练流水线}{3}{subsection.4.3}\protected@file@percent }
+\newlabel{sec:pipeline}{{\mbox  {IV-C}}{3}{四阶段训练流水线}{subsection.4.3}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {IV-C}1}阶段1：专家示例预填充}{3}{subsubsection.4.3.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces 奖励函数系数。}}{3}{table.2}\protected@file@percent }
+\newlabel{tab:reward_coeff}{{II}{3}{奖励函数系数。}{table.2}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {IV-C}2}阶段2：监督预训练（DQfD风格）}{3}{subsubsection.4.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {IV-C}3}阶段3：主训练循环}{3}{subsubsection.4.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-D}}多层安全机制}{3}{subsection.4.4}\protected@file@percent }
+\newlabel{sec:safety}{{\mbox  {IV-D}}{3}{多层安全机制}{subsection.4.4}{}}
+\@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces 森林导航四阶段DQN训练流水线}}{4}{algorithm.1}\protected@file@percent }
+\newlabel{alg:training}{{1}{4}{四阶段训练流水线}{algorithm.1}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {III}{\ignorespaces 训练超参数。}}{4}{table.3}\protected@file@percent }
+\newlabel{tab:hyperparams}{{III}{4}{训练超参数。}{table.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {V}实验设置}{4}{section.5}\protected@file@percent }
+\newlabel{sec:setup}{{V}{4}{实验设置}{section.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-A}}环境配置}{4}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-B}}训练配置}{4}{subsection.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-C}}评估协议}{4}{subsection.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {VI}实验结果}{4}{section.6}\protected@file@percent }
+\newlabel{sec:results}{{VI}{4}{实验结果}{section.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-A}}训练动态}{4}{subsection.6.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces 1000集训练评估指标。从左到右：贪心成功率、平均集步数、平均回报、规划代价。所有变体在第200集前收敛至高成功率。}}{5}{figure.3}\protected@file@percent }
+\newlabel{fig:training_curves}{{3}{5}{1000集训练评估指标。从左到右：贪心成功率、平均集步数、平均回报、规划代价。所有变体在第200集前收敛至高成功率。}{figure.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces 训练奖励曲线（1000集）。透明线：原始集回报；实线：滑动平均。所有六种变体均收敛至相近奖励水平（约400--500）。}}{5}{figure.4}\protected@file@percent }
+\newlabel{fig:rewards}{{4}{5}{训练奖励曲线（1000集）。透明线：原始集回报；实线：滑动平均。所有六种变体均收敛至相近奖励水平（约400--500）。}{figure.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-B}}主要结果}{5}{subsection.6.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-C}}路径可视化}{5}{subsection.6.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-D}}控制曲线}{5}{subsection.6.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-E}}架构对比}{5}{subsection.6.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-F}}消融研究}{5}{subsection.6.6}\protected@file@percent }
+\newlabel{sec:ablation}{{\mbox  {VI-F}}{5}{消融研究}{subsection.6.6}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {VI-F}1}目标邻近奖励塑形}{5}{subsubsection.6.6.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces 训练诊断指标。从左到右：总损失、TD损失、$\epsilon $调度、Q值范围（最大-最小）、Q值均值、Q值标准差。PDDQN变体因Polyak软更新展现出更平滑的Q值动态。}}{6}{figure.5}\protected@file@percent }
+\newlabel{fig:diagnostics}{{5}{6}{训练诊断指标。从左到右：总损失、TD损失、$\epsilon $调度、Q值范围（最大-最小）、Q值均值、Q值标准差。PDDQN变体因Polyak软更新展现出更平滑的Q值动态。}{figure.5}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {IV}{\ignorespaces \texttt  {forest\_a}上的评估结果（1000集训练）。最优RL结果用\textbf  {粗体}标注。}}{6}{table.4}\protected@file@percent }
+\newlabel{tab:main_results}{{IV}{6}{\texttt {forest\_a}上的评估结果（1000集训练）。最优RL结果用\textbf {粗体}标注。}{table.4}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {V}{\ignorespaces 消融：目标邻近奖励塑形。6种变体RL均值成功率（300集）。}}{6}{table.5}\protected@file@percent }
+\newlabel{tab:ablation_shaping}{{V}{6}{消融：目标邻近奖励塑形。6种变体RL均值成功率（300集）。}{table.5}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {VI-F}2}DQN+MPC混合架构}{6}{subsubsection.6.6.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {VI}{\ignorespaces 目标邻近塑形下各变体成功率（短距/长距）。}}{6}{table.6}\protected@file@percent }
+\newlabel{fig:ablation_detail_tbl}{{VI}{6}{目标邻近塑形下各变体成功率（短距/长距）。}{table.6}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {VII}{\ignorespaces 消融：纯DQN与DQN+MPC混合架构。RL均值成功率（300集）。}}{6}{table.7}\protected@file@percent }
+\newlabel{tab:ablation_mpc}{{VII}{6}{消融：纯DQN与DQN+MPC混合架构。RL均值成功率（300集）。}{table.7}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {VI-F}3}训练集数的影响}{6}{subsubsection.6.6.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces 所有算法的规划路径。左：短距离场景；右：长距离场景。RL智能体（彩色线）生成与Hybrid~A*（黑色虚线）相当的平滑路径，RRT*路径（灰色）曲率明显更高。}}{7}{figure.6}\protected@file@percent }
+\newlabel{fig:paths_all}{{6}{7}{所有算法的规划路径。左：短距离场景；右：长距离场景。RL智能体（彩色线）生成与Hybrid~A*（黑色虚线）相当的平滑路径，RRT*路径（灰色）曲率明显更高。}{figure.6}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {VIII}{\ignorespaces DQN+MPC各变体成功率（短距/长距）。}}{7}{table.8}\protected@file@percent }
+\newlabel{tab:ablation_mpc_detail}{{VIII}{7}{DQN+MPC各变体成功率（短距/长距）。}{table.8}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {IX}{\ignorespaces 训练集数对RL均值成功率的影响。}}{7}{table.9}\protected@file@percent }
+\newlabel{tab:ablation_episodes}{{IX}{7}{训练集数对RL均值成功率的影响。}{table.9}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {VII}讨论}{7}{section.7}\protected@file@percent }
+\newlabel{sec:discussion}{{VII}{7}{讨论}{section.7}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces 推理时速度与转向角曲线。上行：短距离；下行：长距离。左列：速度（$v$）；右列：转向角（$\delta $）。RL智能体展现出快速加速、平稳减速的速度曲线。}}{8}{figure.7}\protected@file@percent }
+\newlabel{fig:controls}{{7}{8}{推理时速度与转向角曲线。上行：短距离；下行：长距离。左列：速度（$v$）；右列：转向角（$\delta $）。RL智能体展现出快速加速、平稳减速的速度曲线。}{figure.7}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces 四种奖励塑形消融变体的训练评估指标（每种300集）。基线（A）与仅塑形（B）变体收敛稳定；速度约束（C、D）导致严重的性能下降与训练不稳定。}}{8}{figure.8}\protected@file@percent }
+\@writefile{lof}{\contentsline {subfigure}{\numberline{(a)}{\ignorespaces {A: 基线（无塑形）}}}{8}{subfigure.8.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {subfigure}{\numberline{(b)}{\ignorespaces {B: +目标邻近塑形}}}{8}{subfigure.8.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {subfigure}{\numberline{(c)}{\ignorespaces {C: +速度约束（1.0\,m/s）}}}{8}{subfigure.8.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {subfigure}{\numberline{(d)}{\ignorespaces {D: +速度约束（0.5\,m/s）}}}{8}{subfigure.8.4}\protected@file@percent }
+\newlabel{fig:ablation_curves}{{8}{8}{四种奖励塑形消融变体的训练评估指标（每种300集）。基线（A）与仅塑形（B）变体收敛稳定；速度约束（C、D）导致严重的性能下降与训练不稳定。}{figure.8}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {VIII}结论}{8}{section.8}\protected@file@percent }
+\newlabel{sec:conclusion}{{VIII}{8}{结论}{section.8}{}}
+\bibstyle{IEEEtran}
+\bibdata{references}
+\bibcite{dolgov2010path}{1}
+\bibcite{karaman2011sampling}{2}
+\bibcite{mnih2015human}{3}
+\bibcite{van2016deep}{4}
+\bibcite{lillicrap2015continuous}{5}
+\bibcite{hester2018deep}{6}
+\bibcite{tai2017virtual}{7}
+\bibcite{xie2018learning}{8}
+\bibcite{huang2020closer}{9}
+\@writefile{toc}{\contentsline {section}{参考文献}{9}{section*.1}\protected@file@percent }
+\gdef \@abspage@last{9}

@@ -1,0 +1,20 @@
+{
+  "_comment": "Realmap test: infer v14b model on real-world PGM map (map_a, 410x129 cells, 0.1m/cell). Fixed start/goal, all 6 algos + baselines.",
+  "infer": {
+    "envs": ["realmap_a"],
+    "models": "repro_20260226_v14b_1000ep",
+    "out": "repro_20260227_realmap_test",
+    "rl_algos": ["mlp-dqn", "mlp-ddqn", "mlp-pddqn", "cnn-dqn", "cnn-ddqn", "cnn-pddqn"],
+    "baselines": ["all"],
+    "rl_mpc_track": true,
+    "random_start_goal": false,
+    "runs": 1,
+    "max_steps": 1500,
+    "goal_tolerance": 1.0,
+    "goal_speed_tol": 999.0,
+    "kpi_time_mode": "policy",
+    "device": "cuda",
+    "cuda_device": 0,
+    "seed": 0
+  }
+}

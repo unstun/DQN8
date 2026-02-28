@@ -1,0 +1,28 @@
+{
+  "_comment": "Realmap_a zero-shot test: short(6-14m) x20 + long(20m+) x20. Maps max diagonal≈43m so long_min=20m.",
+  "infer": {
+    "envs": ["realmap_a"],
+    "models": "repro_20260226_v14b_1000ep",
+    "out": "repro_20260227_realmap_20runs",
+    "rl_algos": ["mlp-dqn", "mlp-ddqn", "mlp-pddqn", "cnn-dqn", "cnn-ddqn", "cnn-pddqn"],
+    "baselines": ["all"],
+    "rl_mpc_track": true,
+    "random_start_goal": true,
+    "rand_two_suites": true,
+    "runs": 20,
+    "plot_pair_runs": true,
+    "plot_pair_runs_max": 4,
+    "rand_short_min_cost_m": 6.0,
+    "rand_short_max_cost_m": 14.0,
+    "rand_long_min_cost_m": 20.0,
+    "rand_long_max_cost_m": 0.0,
+    "rand_tries": 600,
+    "max_steps": 2000,
+    "goal_tolerance": 1.0,
+    "goal_speed_tol": 999.0,
+    "kpi_time_mode": "policy",
+    "device": "cuda",
+    "cuda_device": 0,
+    "seed": 0
+  }
+}
