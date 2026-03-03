@@ -1,9 +1,39 @@
+"""Map definitions and loading for all supported environments.
+
+Map types
+---------
+- Forest maps (procedural):  forest_a / forest_b / forest_c / forest_d
+  Generated via ForestParams + generate_forest_grid() in forest.py.
+  Cached in _FOREST_CACHE after first access.
+
+- Real-world maps (PGM):     realmap_a
+  Loaded from realmap/map_a.pgm via pgm.py.
+  Start/goal chosen by EDT clearance analysis.
+
+Key exports
+-----------
+- MapSpec protocol        Interface: name, start_xy, goal_xy, size, obstacle_grid().
+- GridMapSpec             String-row map spec (legacy grid maps).
+- ArrayGridMapSpec        Numpy-array map spec (forest + realmap).
+- get_map_spec(name)      Unified entry: returns MapSpec for any env name.
+- FOREST_ENV_ORDER        ("forest_a", "forest_b", "forest_c", "forest_d")
+- REALMAP_ENV_ORDER       ("realmap_a",)
+- ALL_ENV_ORDER           FOREST + REALMAP combined.
+
+Precomputed expert paths
+------------------------
+maps/precomputed/*.json   Hybrid A* reference paths (used by DQfD in train.py).
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 import numpy as np
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class MapSpec(Protocol):
@@ -92,7 +122,7 @@ def _get_realmap_spec(env_name: str) -> ArrayGridMapSpec:
         return _REALMAP_CACHE[env_name]
     from amr_dqn.maps.pgm import load_pgm_map
     if env_name == "realmap_a":
-        pgm_path = "/home/sun/下载/realmap/map_a.pgm"
+        pgm_path = str(_PROJECT_ROOT / "realmap" / "map_a.pgm")
         # Best start/goal found by distance-transform analysis (clearance >1.8m each)
         start_xy = (34, 29)   # x=34, y=29 (y=0 at bottom), clearance≈1.88m
         goal_xy  = (371, 109) # x=371, y=109, clearance≈2.20m

@@ -1,3 +1,14 @@
+"""Path quality KPI helpers for evaluation.
+
+Computes geometric metrics on polyline paths (list of (x, y) tuples):
+- path_length()           Total Euclidean length.
+- corner_angles_deg()     Turning angle at each interior vertex.
+- num_path_corners()      Count of vertices exceeding an angle threshold.
+- max_corner_degree()     Maximum turning angle.
+- avg_abs_curvature()     Length-weighted mean |kappa| via circumcircle formula.
+- KPI dataclass           Aggregated result bundle used by infer.py.
+"""
+
 from __future__ import annotations
 
 import math

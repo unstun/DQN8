@@ -1,3 +1,19 @@
+"""DQN-family reinforcement-learning agents for AMR path planning.
+
+Provides
+--------
+- AgentConfig          Frozen dataclass of all hyper-parameters (gamma, lr, eps, DQfD margins ...)
+- parse_rl_algo()      Canonical name resolution: "mlp-dqn" / "cnn-ddqn" / legacy aliases
+- DQNFamilyAgent       Unified agent supporting DQN, Double-DQN (DDQN) and Polyak-DDQN (PDDQN),
+                       with MLP or CNN Q-networks, n-step returns, action masking, and
+                       DQfD-style expert margin + behaviour-cloning losses.
+
+Data flow
+---------
+env.step() -> agent.observe() -> replay_buffer -> agent.update() -> Q-network gradients
+                                                   ^ optional DQfD demo loss
+"""
+
 from __future__ import annotations
 
 from collections import deque

@@ -1,3 +1,10 @@
+"""Path smoothing via Chaikin corner-cutting.
+
+Repeatedly replaces each segment (p0, p1) with two new points at 25%/75%
+along the segment, preserving start and end points.  Used to post-process
+DQN paths and classical planner outputs before KPI evaluation.
+"""
+
 from __future__ import annotations
 
 import numpy as np

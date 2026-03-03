@@ -1,3 +1,10 @@
+"""Benchmark orchestrator: train -> infer -> validate KPI results.
+
+Runs train.py and infer.py as subprocesses, then loads the resulting
+table2_kpis.csv and checks that all required algorithms are present
+and meet minimum quality thresholds.
+"""
+
 from __future__ import annotations
 
 import argparse

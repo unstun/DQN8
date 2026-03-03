@@ -1,3 +1,33 @@
+"""Gymnasium environments for AMR (Autonomous Mobile Robot) path planning.
+
+This is the largest module (~2000 lines). Contents by section:
+
+Section 1 — Utility functions (L30-70)
+    _downsample_map_preserve_aspect   Resize occupancy map keeping aspect ratio.
+
+Section 2 — AMRGridEnv (L70-270)
+    RewardWeights                     Dataclass for multi-objective reward tuning.
+    AMRGridEnv                        Simple 8-directional grid environment (mostly for prototyping).
+
+Section 3 — Bicycle model primitives (L270-600)
+    BicycleModelParams                Ackermann bicycle kinematic parameters.
+    build_ackermann_action_table_35   35-action discretization of (delta_dot, accel).
+    bicycle_integrate_one_step        Single-step Euler integration of bicycle ODE.
+    TwoCircleFootprint                Conservative two-circle collision approximation.
+    compute_edt_distance_m            Euclidean Distance Transform for clearance maps.
+    bilinear_sample_2d*               Sub-cell interpolation of map layers.
+    dijkstra_cost_to_goal_m           Geodesic cost-to-goal field (obstacle-aware).
+
+Section 4 — AMRBicycleEnv (L600-2064)
+    AMRBicycleEnv                     Full bicycle-kinematics environment with:
+        - Ackermann steering + acceleration (35 discrete actions)
+        - Three map channels: occupancy + cost-to-goal + EDT clearance
+        - Multi-component reward (goal, collision, progress, safe-distance, speed, curvature)
+        - Admissible action mask / safety shield
+        - Hybrid A* expert action for DQfD demos
+        - Short-rollout heuristic fallback
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -28,6 +58,10 @@ _ACTIONS_8 = np.array(
     dtype=np.int32,
 )
 
+
+# ===========================================================================
+# Section 1 — Utility functions
+# ===========================================================================
 
 def _downsample_map_preserve_aspect(
     src: np.ndarray,
@@ -63,6 +97,10 @@ def _downsample_map_preserve_aspect(
     out[:ds_h, :ds_w] = resized
     return out
 
+
+# ===========================================================================
+# Section 2 — AMRGridEnv (simple 8-directional grid environment)
+# ===========================================================================
 
 @dataclass(frozen=True)
 class RewardWeights:
@@ -268,6 +306,10 @@ class AMRGridEnv(gym.Env):
 
         return float(r)
 
+
+# ===========================================================================
+# Section 3 — Bicycle model primitives (kinematics, collision, cost fields)
+# ===========================================================================
 
 @dataclass(frozen=True)
 class BicycleModelParams:
@@ -601,6 +643,10 @@ def dijkstra_cost_to_goal_m(
     return cost.astype(np.float32, copy=False)
 
 
+# ===========================================================================
+# Section 4 — AMRBicycleEnv (full Ackermann bicycle environment)
+# ===========================================================================
+
 class AMRBicycleEnv(gym.Env):
     """Ackermann/bicycle dynamics on a grid occupancy map using EDT for collision + clearance (OD)."""
 
@@ -863,6 +909,23 @@ class AMRBicycleEnv(gym.Env):
         self._curriculum_start_xy = np.stack([cand_x, cand_y], axis=1).astype(np.int32, copy=False)
         self._curriculum_start_costs_m = self._cost_to_goal_m[cand_y, cand_x].astype(np.float32, copy=False)
 
+    def _heading_from_cost_gradient(self, cx: int, cy: int) -> float | None:
+        """Return heading from cost-to-go gradient descent, or None if undefined."""
+        cost = self._cost_to_goal_m
+        h, w = cost.shape
+        x0, x1 = max(0, cx - 1), min(w - 1, cx + 1)
+        y0, y1 = max(0, cy - 1), min(h - 1, cy + 1)
+        c_x0, c_x1 = float(cost[cy, x0]), float(cost[cy, x1])
+        c_y0, c_y1 = float(cost[y0, cx]), float(cost[y1, cx])
+        if not (math.isfinite(c_x0) and math.isfinite(c_x1)
+                and math.isfinite(c_y0) and math.isfinite(c_y1)):
+            return None
+        gx = c_x1 - c_x0
+        gy = c_y1 - c_y0
+        if abs(gx) < 1e-12 and abs(gy) < 1e-12:
+            return None
+        return wrap_angle_rad(math.atan2(-gy, -gx))
+
     def _update_start_dependent_fields(self, *, start_xy: tuple[int, int]) -> None:
         sx, sy = int(start_xy[0]), int(start_xy[1])
         if not self._in_bounds_xy((sx, sy)):
@@ -876,6 +939,11 @@ class AMRBicycleEnv(gym.Env):
         dx0 = float(self.goal_xy[0] - int(sx)) * self.cell_size_m
         dy0 = float(self.goal_xy[1] - int(sy)) * self.cell_size_m
         psi0 = wrap_angle_rad(math.atan2(dy0, dx0))
+        _od_chk, coll_chk = self._od_and_collision_at_pose_m(start_x_m, start_y_m, float(psi0))
+        if bool(coll_chk):
+            psi_grad = self._heading_from_cost_gradient(int(sx), int(sy))
+            if psi_grad is not None:
+                psi0 = psi_grad
         start_cost_pose = self._cost_to_goal_pose_m(start_x_m, start_y_m, psi0)
         self._cost_norm_m = float(max(self._diag_m, start_cost_cell, start_cost_pose))
         if not math.isfinite(self._cost_norm_m):
@@ -941,17 +1009,21 @@ class AMRBicycleEnv(gym.Env):
             si = int(self._rng.integers(0, int(sx.size)))
             start_xy = (int(sx[si]), int(sy[si]))
 
-            # Verify the initial pose (heading to goal) is collision-free under the two-circle footprint.
+            # Verify the initial pose is collision-free under the two-circle footprint.
+            # Try atan2 heading (toward goal) first; fallback to cost-gradient heading.
             dx0 = float(gx - int(start_xy[0])) * float(self.cell_size_m)
             dy0 = float(gy - int(start_xy[1])) * float(self.cell_size_m)
             psi0 = wrap_angle_rad(math.atan2(dy0, dx0))
-            _od0, coll0 = self._od_and_collision_at_pose_m(
-                float(start_xy[0]) * float(self.cell_size_m),
-                float(start_xy[1]) * float(self.cell_size_m),
-                float(psi0),
-            )
+            sx_m = float(start_xy[0]) * float(self.cell_size_m)
+            sy_m = float(start_xy[1]) * float(self.cell_size_m)
+            _od0, coll0 = self._od_and_collision_at_pose_m(sx_m, sy_m, float(psi0))
             if bool(coll0):
-                continue
+                psi_grad = self._heading_from_cost_gradient(int(start_xy[0]), int(start_xy[1]))
+                if psi_grad is None:
+                    continue
+                _od0, coll0 = self._od_and_collision_at_pose_m(sx_m, sy_m, float(psi_grad))
+                if bool(coll0):
+                    continue
 
             # Update normalization anchor to the sampled start.
             try:
@@ -1125,6 +1197,17 @@ class AMRBicycleEnv(gym.Env):
         dx = float(self.goal_xy[0] - start_xy[0]) * self.cell_size_m
         dy = float(self.goal_xy[1] - start_xy[1]) * self.cell_size_m
         psi = wrap_angle_rad(math.atan2(dy, dx))
+        # Fallback: if atan2 heading collides, use cost-gradient direction.
+        if psi_override is None:
+            _od_chk, coll_chk = self._od_and_collision_at_pose_m(
+                float(self._x_m), float(self._y_m), float(psi),
+            )
+            if bool(coll_chk):
+                psi_grad = self._heading_from_cost_gradient(
+                    int(start_xy[0]), int(start_xy[1]),
+                )
+                if psi_grad is not None:
+                    psi = psi_grad
         if psi_override is not None:
             psi = float(psi_override)
         self._psi_rad = float(psi)

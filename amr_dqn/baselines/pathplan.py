@@ -1,3 +1,19 @@
+"""Hybrid A* and RRT* planning wrappers for baseline evaluation.
+
+Provides
+--------
+- PlannerResult             Dataclass: path + timing + success flag + stats.
+- default_ackermann_params  Default Ackermann kinematic params (wheelbase 0.6m, delta_max 27deg).
+- grid_map_from_obstacles   Convert numpy obstacle grid to GridMap for planners.
+- forest_two_circle_footprint / forest_oriented_box_footprint
+                            Vehicle collision geometry matching the bicycle env.
+- plan_hybrid_astar()       Run Hybrid A* with timeout and node limit.
+- plan_rrt_star()           Run RRT* with multi-restart strategy.
+
+These functions are called by cli/infer.py to produce classical-planner paths
+that serve as baselines for the DQN agent comparison (Table II in the paper).
+"""
+
 from __future__ import annotations
 
 import math

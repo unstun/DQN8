@@ -1,3 +1,9 @@
+"""Epsilon-decay schedules for exploration.
+
+- linear_epsilon()    Linear decay from eps_start -> eps_final over decay_episodes.
+- adaptive_epsilon()  Sigmoid decay (paper Eq. 15): smooth transition with configurable steepness.
+"""
+
 from __future__ import annotations
 
 import math

@@ -1,3 +1,13 @@
+"""PyTorch / CUDA / Matplotlib runtime setup.
+
+Provides
+--------
+- configure_runtime()    Force non-interactive Matplotlib backend; OpenMP workaround on Windows.
+- torch_runtime_info()   Detect CUDA availability, device count, device names.
+- require_cuda()         Return CUDA device or raise with diagnostic message.
+- select_device()        "auto" / "cuda" / "cpu" device selection.
+"""
+
 from __future__ import annotations
 
 import os

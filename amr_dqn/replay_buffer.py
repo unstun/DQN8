@@ -1,3 +1,13 @@
+"""Uniform experience-replay buffer with DQfD demo-preservation.
+
+Stores (obs, action, reward, next_obs, done, next_action_mask, demo_flag, n_steps)
+in pre-allocated numpy arrays for cache-friendly random sampling.
+
+DQfD safeguard: when the buffer is full and a non-demo transition would overwrite a
+demo slot, the buffer scans forward to find a non-demo slot instead.  This keeps
+expert demonstrations available throughout training for the margin/CE losses.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -1,3 +1,21 @@
+"""Q-network architectures for DQN agents.
+
+Provides
+--------
+- MLPQNetwork        Fully-connected Q-network (variable depth/width).
+- CNNQNetwork        Conv2D-based Q-network for map observations.
+                     Splits flat obs into scalar features + 2D map channels,
+                     runs conv layers on maps, concatenates, then feeds an MLP head.
+- infer_flat_obs_cnn_layout()
+                     Auto-detect (scalar_dim, map_channels, map_size) from obs_dim.
+
+Observation format (flat vector)
+--------------------------------
+AMRGridEnv:    [5 scalars] + [1 x N^2 map]       -> obs_dim = 5 + N^2
+AMRBicycleEnv: [11 scalars] + [3 x N^2 maps]     -> obs_dim = 11 + 3*N^2
+               (maps = occupancy, cost-to-goal, EDT clearance)
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

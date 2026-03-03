@@ -1,3 +1,10 @@
+"""Generate a combined train+infer JSON config template.
+
+Introspects argparse definitions from train.py and infer.py to produce
+a single JSON with all available parameters and their defaults.
+Usage: python config.py [--out configs/template.json | --stdout]
+"""
+
 from __future__ import annotations
 
 import argparse

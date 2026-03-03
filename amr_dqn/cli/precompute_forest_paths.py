@@ -1,3 +1,11 @@
+"""Offline precomputation of Hybrid A* expert paths for forest maps.
+
+Generates JSON files in amr_dqn/maps/precomputed/ that are loaded at
+training time to provide demonstration trajectories for DQfD prefill.
+Each JSON contains the path as a list of (x_cells, y_cells) waypoints
+plus timing and planner stats.
+"""
+
 from __future__ import annotations
 
 import argparse

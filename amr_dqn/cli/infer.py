@@ -1,3 +1,38 @@
+"""Inference, evaluation and visualization for trained DQN agents.
+
+Usage:  python infer.py --profile <name>     (reads configs/<name>.json)
+        python infer.py --self-check         (verify CUDA & imports only)
+
+Structure (2700+ lines)
+-----------------------
+Trace helpers:
+    _save_trace_json()                  Write per-run trace metadata companion JSON.
+    PathTrace / ControlTrace / RolloutResult   Dataclasses for rollout outputs.
+
+Rollout engines:
+    rollout_agent()                     Run a trained agent on an env for one episode.
+    rollout_agent_plan_then_track()     Hybrid A* plan then MPC-track mode.
+    rollout_tracked_path_mpc()          Pure MPC path-tracking (for classical baselines).
+
+Model utilities:
+    infer_checkpoint_obs_dim()          Read obs_dim from a .pt checkpoint.
+    forest_legacy_obs_transform()       Handle legacy observation formats.
+
+KPI & post-processing:
+    mean_kpi()                          Average KPIs across runs.
+    smooth_path()                       Chaikin smoothing wrapper.
+
+Visualization:
+    plot_env() / draw_vehicle_boxes()   Map + vehicle footprint drawing.
+    write_paths_figure()                Multi-panel path comparison figure.
+    write_controls_figure()             Steering / speed / curvature over time.
+
+CLI:
+    build_parser()                      Argparse definition (~300 lines).
+    main()                              Entry point: load models -> iterate envs x algos
+                                        -> rollout -> KPI table -> figures.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -41,8 +76,48 @@ from amr_dqn.metrics import KPI, avg_abs_curvature, max_corner_degree, num_path_
 from amr_dqn.smoothing import chaikin_smooth
 
 
+# ===========================================================================
+# Trace helpers & dataclasses
+# ===========================================================================
+
 def _safe_slug(s: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", str(s)).strip("_")
+
+
+def _save_trace_json(
+    traces_dir: Path,
+    csv_name: str,
+    *,
+    algorithm: str,
+    cell_size_m: float,
+    env_base: str,
+    env_case: str,
+    start_xy: tuple[int, int],
+    goal_xy: tuple[int, int],
+    run_idx: int,
+) -> None:
+    """Write a trace metadata JSON companion file next to the CSV."""
+    _start_m = (float(start_xy[0]) * float(cell_size_m), float(start_xy[1]) * float(cell_size_m))
+    _goal_m = (float(goal_xy[0]) * float(cell_size_m), float(goal_xy[1]) * float(cell_size_m))
+    json_name = csv_name.replace(".csv", ".json")
+    (traces_dir / json_name).write_text(
+        json.dumps({
+            "algorithm": str(algorithm),
+            "cell_size_m": float(cell_size_m),
+            "env_base": str(env_base),
+            "env_case": str(env_case),
+            "goal_m": list(_goal_m),
+            "goal_xy": list(goal_xy),
+            "kind": "trace",
+            "map_grid_npz": f"maps/{_safe_slug(env_base)}__grid_y0_bottom.npz",
+            "map_meta_json": f"maps/{_safe_slug(env_base)}__meta.json",
+            "run_idx": int(run_idx),
+            "start_m": list(_start_m),
+            "start_xy": list(start_xy),
+            "trace_csv": f"traces/{csv_name}",
+        }, indent=2, sort_keys=False),
+        encoding="utf-8",
+    )
 
 
 @dataclass(frozen=True)
@@ -68,6 +143,7 @@ class RolloutResult:
     controls: ControlTrace | None = None
     planning_time_s: float = 0.0
     tracking_time_s: float = 0.0
+    trace_rows: list[dict[str, object]] | None = None
 
 
 def _env_dt_s(env: gym.Env) -> float:
@@ -75,6 +151,10 @@ def _env_dt_s(env: gym.Env) -> float:
         return float(env.model.dt)
     return 1.0
 
+
+# ===========================================================================
+# Rollout engines (agent, plan+track, MPC)
+# ===========================================================================
 
 def rollout_agent(
     env: gym.Env,
@@ -90,6 +170,7 @@ def rollout_agent(
     forest_min_od_m: float = 0.0,
     forest_min_progress_m: float = 1e-4,
     collect_controls: bool = False,
+    collect_trace: bool = False,
 ) -> RolloutResult:
     obs, _info0 = env.reset(seed=seed, options=reset_options)
     if obs_transform is not None:
@@ -104,6 +185,25 @@ def rollout_agent(
         t_series = [0.0]
         v_series = [float(getattr(env, "_v_m_s", 0.0))]
         delta_series = [float(getattr(env, "_delta_rad", 0.0))]
+
+    trace_rows: list[dict[str, object]] | None = None
+    if bool(collect_trace) and isinstance(env, AMRBicycleEnv):
+        trace_rows = [{
+            "step": 0,
+            "x_m": float(env._x_m),
+            "y_m": float(env._y_m),
+            "theta_rad": float(env._psi_rad),
+            "v_m_s": float(env._v_m_s),
+            "delta_rad": float(env._delta_rad),
+            "action": -1,
+            "delta_dot_rad_s": 0.0,
+            "a_m_s2": 0.0,
+            "od_m": float(getattr(env, "_last_od_m", 0.0)),
+            "collision": False,
+            "reached": False,
+            "stuck": False,
+            "reward": 0.0,
+        }]
 
     def sync_cuda() -> None:
         if agent.device.type == "cuda" and torch.cuda.is_available():
@@ -142,11 +242,32 @@ def rollout_agent(
         if time_mode == "policy":
             sync_cuda()
             inference_time_s += float(time.perf_counter() - t0)
-        obs, _, done, truncated, info = env.step(a)
+        obs, rew, done, truncated, info = env.step(a)
         if obs_transform is not None:
             obs = obs_transform(obs)
         x, y = info["agent_xy"]
         path.append((float(x), float(y)))
+        if trace_rows is not None:
+            _a_id = int(a)
+            _dd = float(env.action_table[_a_id, 0])
+            _aa = float(env.action_table[_a_id, 1])
+            px, py, pth = info.get("pose_m", (env._x_m, env._y_m, env._psi_rad))
+            trace_rows.append({
+                "step": int(steps),
+                "x_m": float(px),
+                "y_m": float(py),
+                "theta_rad": float(pth),
+                "v_m_s": float(info.get("v_m_s", env._v_m_s)),
+                "delta_rad": float(info.get("delta_rad", env._delta_rad)),
+                "action": _a_id,
+                "delta_dot_rad_s": _dd,
+                "a_m_s2": _aa,
+                "od_m": float(info.get("od_m", float("nan"))),
+                "collision": bool(info.get("collision", False)),
+                "reached": bool(info.get("reached", False)),
+                "stuck": bool(info.get("stuck", False)),
+                "reward": float(rew),
+            })
         if t_series is not None and v_series is not None and delta_series is not None:
             t_series.append(float(steps) * dt_s)
             v_series.append(float(info.get("v_m_s", float(getattr(env, "_v_m_s", 0.0)))))
@@ -172,6 +293,7 @@ def rollout_agent(
         steps=int(steps),
         path_time_s=float(steps) * dt_s,
         controls=controls,
+        trace_rows=trace_rows,
     )
 
 
@@ -525,6 +647,10 @@ def rollout_tracked_path_mpc(
     )
 
 
+# ===========================================================================
+# Model utilities & KPI post-processing
+# ===========================================================================
+
 def infer_checkpoint_obs_dim(path: Path) -> int:
     payload = torch.load(Path(path), map_location="cpu")
     if not isinstance(payload, dict) or "q_state_dict" not in payload:
@@ -583,6 +709,10 @@ def smooth_path(path: list[tuple[float, float]], *, iterations: int) -> list[tup
     sm = chaikin_smooth(pts, iterations=max(0, int(iterations)))
     return [(float(x), float(y)) for x, y in sm]
 
+
+# ===========================================================================
+# Visualization helpers
+# ===========================================================================
 
 def plot_env(ax: plt.Axes, grid: np.ndarray, *, title: str) -> None:
     ax.imshow(grid, origin="lower", cmap="gray_r", vmin=0, vmax=1)
@@ -666,6 +796,10 @@ def draw_vehicle_boxes(
         )
         ax.add_patch(poly)
 
+
+# ===========================================================================
+# Argparse & CLI entry point
+# ===========================================================================
 
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="Run inference and generate Fig.12 + Table II-style KPIs.")
@@ -885,6 +1019,15 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Forest-only: when --forest-baseline-rollout is enabled, save per-run executed baseline trajectories "
             "(x,y,theta,v,delta,controls,OD) under <run_dir>/traces/ as CSV."
+        ),
+    )
+    ap.add_argument(
+        "--save-traces",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Save per-run trajectory traces (CSV + JSON metadata) and map exports (NPZ + JSON) "
+            "under <run_dir>/traces/ and <run_dir>/maps/. Covers all algorithms (RL + baselines)."
         ),
     )
     ap.add_argument(
@@ -1240,6 +1383,45 @@ def main(argv: list[str] | None = None) -> int:
             base_meta["veh_length_cells"] = 0.0
             base_meta["veh_width_cells"] = 0.0
 
+        # --save-traces: export map once per env_base
+        _save_traces = bool(getattr(args, "save_traces", False))
+        if _save_traces and isinstance(env, AMRBicycleEnv):
+            _maps_dir = out_dir / "maps"
+            _maps_dir.mkdir(parents=True, exist_ok=True)
+            _grid_path = _maps_dir / f"{_safe_slug(env_base)}__grid_y0_bottom.npz"
+            if not _grid_path.exists():
+                np.savez_compressed(str(_grid_path), obstacle_grid=grid, cell_size_m=float(cell_size_m))
+            _meta_path = _maps_dir / f"{_safe_slug(env_base)}__meta.json"
+            if not _meta_path.exists():
+                _fp = forest_two_circle_footprint()
+                _map_meta = {
+                    "env_base": str(env_base),
+                    "cell_size_m": float(cell_size_m),
+                    "grid_shape": list(grid.shape),
+                    "grid_values": {"0": "free", "1": "obstacle"},
+                    "canonical_start_xy": [int(spec.start_xy[0]), int(spec.start_xy[1])],
+                    "canonical_goal_xy": [int(spec.goal_xy[0]), int(spec.goal_xy[1])],
+                    "collision_footprint": {
+                        "kind": "two_circle",
+                        "radius_m": float(_fp.radius),
+                        "x1_m": float(_fp.center_shift - _fp.center_offset),
+                        "x2_m": float(_fp.center_shift + _fp.center_offset),
+                    },
+                    "goal": {
+                        "position_tolerance_m": float(env.goal_tolerance_m),
+                        "position_tolerance_cells": float(env.goal_tolerance_m) / float(cell_size_m),
+                        "angle_tolerance_rad": float(env.goal_angle_tolerance_rad),
+                    },
+                    "convention": {
+                        "grid_y0_bottom": True,
+                        "origin": "bottom_left",
+                        "x_axis": "+right",
+                        "y_axis": "+up",
+                        "trace_units": {"x_m_y_m": "meters"},
+                    },
+                }
+                _meta_path.write_text(json.dumps(_map_meta, indent=2, sort_keys=False), encoding="utf-8")
+
         plot_run_idx = int(getattr(args, "plot_run_idx", 0))
         plot_run_indices: list[int] = [int(plot_run_idx)]
         multi_pair_plot = (
@@ -1522,6 +1704,7 @@ def main(argv: list[str] | None = None) -> int:
                         forest_min_od_m=float(args.forest_min_od_m),
                         forest_min_progress_m=float(args.forest_min_progress_m),
                         collect_controls=bool(int(i) in control_run_indices),
+                        collect_trace=_save_traces,
                     )
                     algo_times.append(float(roll.compute_time_s))
                     algo_plan_times.append(float(roll.compute_time_s))
@@ -1539,6 +1722,19 @@ def main(argv: list[str] | None = None) -> int:
                         gx, gy = opts["goal_xy"]  # type: ignore[misc]
                         start_xy = (int(sx), int(sy))
                         goal_xy = (int(gx), int(gy))
+
+                    # --save-traces: write RL direct-control trace CSV + JSON
+                    if _save_traces and roll.trace_rows is not None:
+                        _tr_dir = out_dir / "traces"
+                        _tr_dir.mkdir(parents=True, exist_ok=True)
+                        _csv_name = f"{_safe_slug(env_case)}__{_safe_slug(pretty)}__run{int(i)}.csv"
+                        pd.DataFrame(roll.trace_rows).to_csv(_tr_dir / _csv_name, index=False)
+                        _save_trace_json(
+                            _tr_dir, _csv_name,
+                            algorithm=str(pretty), cell_size_m=float(cell_size_m),
+                            env_base=str(env_base), env_case=str(env_case),
+                            start_xy=start_xy, goal_xy=goal_xy, run_idx=int(i),
+                        )
 
                     raw_corners = float(num_path_corners(roll.path_xy_cells, angle_threshold_deg=13.0))
                     smoothed = smooth_path(roll.path_xy_cells, iterations=2)
@@ -1763,7 +1959,7 @@ def main(argv: list[str] | None = None) -> int:
                         # --- Plan+MPC row ("Hybrid A*+MPC") ---
                         if bool(res.success):
                             trace_path = None
-                            if bool(getattr(args, "forest_baseline_save_traces", False)):
+                            if bool(getattr(args, "forest_baseline_save_traces", False)) or _save_traces:
                                 trace_path = out_dir / "traces" / f"{_safe_slug(env_case)}__Hybrid_A__run{int(i)}.csv"
                             roll = rollout_tracked_path_mpc(
                                 env,
@@ -1782,6 +1978,13 @@ def main(argv: list[str] | None = None) -> int:
                             mpc_path_t = float(roll.path_time_s)
                             if int(i) in control_run_indices and roll.controls is not None:
                                 controls_for_plot.setdefault((env_name, int(i)), {})["Hybrid A*+MPC"] = roll.controls
+                            if trace_path is not None and _save_traces:
+                                _save_trace_json(
+                                    trace_path.parent, trace_path.name,
+                                    algorithm="Hybrid A*", cell_size_m=float(cell_size_m),
+                                    env_base=str(env_base), env_case=str(env_case),
+                                    start_xy=start_xy, goal_xy=goal_xy, run_idx=int(i),
+                                )
                         else:
                             mpc_exec_path = list(res.path_xy_cells)
                             mpc_reached = False
@@ -1832,7 +2035,7 @@ def main(argv: list[str] | None = None) -> int:
                         ha_path_time_s = float("nan")
                         if bool(res.success) and isinstance(env, AMRBicycleEnv) and bool(getattr(args, "forest_baseline_rollout", False)):
                             trace_path = None
-                            if bool(getattr(args, "forest_baseline_save_traces", False)):
+                            if bool(getattr(args, "forest_baseline_save_traces", False)) or _save_traces:
                                 trace_path = out_dir / "traces" / f"{_safe_slug(env_case)}__Hybrid_A__run{int(i)}.csv"
                             roll = rollout_tracked_path_mpc(
                                 env,
@@ -1851,6 +2054,13 @@ def main(argv: list[str] | None = None) -> int:
                             ha_path_time_s = float(roll.path_time_s)
                             if int(i) in control_run_indices and roll.controls is not None:
                                 controls_for_plot.setdefault((env_name, int(i)), {})["Hybrid A*"] = roll.controls
+                            if trace_path is not None and _save_traces:
+                                _save_trace_json(
+                                    trace_path.parent, trace_path.name,
+                                    algorithm="Hybrid A*", cell_size_m=float(cell_size_m),
+                                    env_base=str(env_base), env_case=str(env_case),
+                                    start_xy=start_xy, goal_xy=goal_xy, run_idx=int(i),
+                                )
 
                         ha_plan_times.append(float(res.time_s))
                         ha_track_times.append(float(ha_track_time_s))
@@ -2002,7 +2212,7 @@ def main(argv: list[str] | None = None) -> int:
                         # --- Plan+MPC row ("RRT*+MPC") ---
                         if bool(res.success):
                             trace_path = None
-                            if bool(getattr(args, "forest_baseline_save_traces", False)):
+                            if bool(getattr(args, "forest_baseline_save_traces", False)) or _save_traces:
                                 trace_path = out_dir / "traces" / f"{_safe_slug(env_case)}__RRT__run{int(i)}.csv"
                             roll = rollout_tracked_path_mpc(
                                 env,
@@ -2021,6 +2231,13 @@ def main(argv: list[str] | None = None) -> int:
                             mpc_path_t = float(roll.path_time_s)
                             if int(i) in control_run_indices and roll.controls is not None:
                                 controls_for_plot.setdefault((env_name, int(i)), {})["RRT*+MPC"] = roll.controls
+                            if trace_path is not None and _save_traces:
+                                _save_trace_json(
+                                    trace_path.parent, trace_path.name,
+                                    algorithm="SS-RRT*", cell_size_m=float(cell_size_m),
+                                    env_base=str(env_base), env_case=str(env_case),
+                                    start_xy=start_xy, goal_xy=goal_xy, run_idx=int(i),
+                                )
                         else:
                             mpc_exec_path = list(res.path_xy_cells)
                             mpc_reached = False
@@ -2071,7 +2288,7 @@ def main(argv: list[str] | None = None) -> int:
                         path_time_s = float("nan")
                         if bool(res.success) and isinstance(env, AMRBicycleEnv) and bool(getattr(args, "forest_baseline_rollout", False)):
                             trace_path = None
-                            if bool(getattr(args, "forest_baseline_save_traces", False)):
+                            if bool(getattr(args, "forest_baseline_save_traces", False)) or _save_traces:
                                 trace_path = out_dir / "traces" / f"{_safe_slug(env_case)}__RRT__run{int(i)}.csv"
                             roll = rollout_tracked_path_mpc(
                                 env,
@@ -2090,6 +2307,13 @@ def main(argv: list[str] | None = None) -> int:
                             path_time_s = float(roll.path_time_s)
                             if int(i) in control_run_indices and roll.controls is not None:
                                 controls_for_plot.setdefault((env_name, int(i)), {})["RRT*"] = roll.controls
+                            if trace_path is not None and _save_traces:
+                                _save_trace_json(
+                                    trace_path.parent, trace_path.name,
+                                    algorithm="SS-RRT*", cell_size_m=float(cell_size_m),
+                                    env_base=str(env_base), env_case=str(env_case),
+                                    start_xy=start_xy, goal_xy=goal_xy, run_idx=int(i),
+                                )
 
                         rrt_plan_times.append(float(res.time_s))
                         rrt_track_times.append(float(track_time_s))

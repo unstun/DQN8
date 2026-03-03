@@ -1,3 +1,30 @@
+"""Training loop for DQN/DDQN agents on AMR path-planning environments.
+
+Usage:  python train.py --profile <name>     (reads configs/<name>.json)
+        python train.py --self-check         (verify CUDA & imports only)
+
+Structure (1500+ lines)
+-----------------------
+Helpers:
+    moving_average()                   Smoothing for training curves.
+    plot_training_eval_metrics()       Plot eval success_rate / avg_steps / avg_return.
+    plot_training_diagnostics()        Plot per-step loss / epsilon / Q-values.
+
+DQfD expert support:
+    forest_demo_target()               How many demos to pre-fill.
+    forest_expert_action()             Query Hybrid A* expert for a single action.
+    collect_forest_demos()             Batch-fill replay buffer with expert demonstrations.
+
+Core:
+    train_one()                        Train one (env, algo) combination for N episodes.
+                                       Contains the episode loop, DQfD pre-training,
+                                       periodic greedy evaluation, and checkpoint saving.
+
+CLI:
+    build_parser()                     Argparse definition (~300 lines of parameters).
+    main()                             Entry point: load config -> iterate envs x algos -> train_one.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -26,6 +53,10 @@ from amr_dqn.env import AMRBicycleEnv, AMRGridEnv, RewardWeights
 from amr_dqn.forest_policy import forest_compute_next_mask, forest_select_action
 from amr_dqn.maps import FOREST_ENV_ORDER, REALMAP_ENV_ORDER, get_map_spec
 
+
+# ===========================================================================
+# Plotting helpers
+# ===========================================================================
 
 def moving_average(x: np.ndarray, window: int) -> np.ndarray:
     if window <= 1:
@@ -189,6 +220,10 @@ def plot_training_diagnostics(df_diag: pd.DataFrame, *, out_path: Path) -> None:
     plt.close(fig)
 
 
+# ===========================================================================
+# DQfD expert demonstration support
+# ===========================================================================
+
 def forest_demo_target(*, learning_starts: int, batch_size: int) -> int:
     # Forest long-horizon runs can fall into a "stop until stuck" local optimum unless the replay
     # is initially dominated by successful expert trajectories. Empirically, forest_a needs ~20k
@@ -226,6 +261,10 @@ def forest_expert_action(
 
     raise ValueError("forest_expert must be one of: auto, hybrid_astar, cost_to_go")
 
+
+# ===========================================================================
+# Core training loop
+# ===========================================================================
 
 def collect_forest_demos(
     env: AMRBicycleEnv,
@@ -937,6 +976,10 @@ def train_one(
     agent.save(model_path)
     return agent, returns, eval_history, diag_history
 
+
+# ===========================================================================
+# Argparse & CLI entry point
+# ===========================================================================
 
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="Train RL agents (default: DQN) and generate Fig. 13-style reward curves.")

@@ -1,3 +1,21 @@
+"""Timestamped experiment-run directory management.
+
+Directory convention
+--------------------
+runs/<experiment_name>/train_YYYYMMDD_HHMMSS/          <- one training run
+                       train_.../models/<env>/          <- saved checkpoints
+                       train_.../infer/YYYYMMDD_HHMMSS/ <- inference output
+                       latest.txt                       <- points to most recent run
+
+Provides
+--------
+- resolve_experiment_dir()      Bare name -> runs/<name>/; path -> as-is.
+- create_run_dir()              Create a new timestamped run directory.
+- latest_run_dir()              Find latest run (via latest.txt or timestamp sort).
+- latest_run_dir_with_models()  Find latest run that contains models/.
+- resolve_models_dir()          Flexible resolution from experiment name / run / models path.
+"""
+
 from __future__ import annotations
 
 import re

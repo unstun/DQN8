@@ -1,6 +1,7 @@
 # Python
 __pycache__/
 *.py[cod]
+*.egg-info/
 
 # Virtualenvs
 .venv/
@@ -9,3 +10,20 @@ venv/
 # Outputs / experiment runs
 runs/
 
+# Legacy / archived data (large, not part of core codebase)
+dqn4作图/
+downloads/
+2026/
+
+# Paper compiled artifacts (source .tex is tracked)
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.log
+paper/*.out
+paper/*.spl
+paper/*.pdf
+
+# Misc
+tmp.md
+*.log

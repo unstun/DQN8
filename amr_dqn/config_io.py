@@ -1,3 +1,21 @@
+"""JSON configuration loading and argparse integration.
+
+Provides
+--------
+- load_json()              Read a JSON file into a dict.
+- resolve_config_path()    Resolve --config / --profile to a Path under configs/.
+- select_section()         Extract the "train" or "infer" sub-dict from a config.
+- apply_config_defaults()  Merge config dict values into an argparse parser's defaults,
+                           with type coercion matching each argument's declared type.
+- parser_defaults()        Dump all argparse defaults as a JSON-compatible dict.
+
+Config resolution order
+-----------------------
+1. --profile <name>  → configs/<name>.json
+2. --config <path>   → literal path (with fallback to configs/ prefix)
+3. (neither)         → configs/config.json if exists, else None
+"""
+
 from __future__ import annotations
 
 import argparse
