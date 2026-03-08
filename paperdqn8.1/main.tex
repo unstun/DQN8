@@ -431,21 +431,74 @@ DQfD预训练步数 & --- & 40\,000 \\
 \end{algorithm}
 
 % ══════════════════════════════════════════════════════════════
-\section{结果与讨论}\label{sec:results}
+\section{实验与结果}\label{sec:results}
 
-为系统评估方法的可行性与有效性，在PyCharm平台实现了所提算法及对比算法的统一仿真框架，并构建仿真森林环境开展对比测试。
+\subsection{实验设置}
 
-\subsection{基准算法}
+\subsubsection{仿真环境}
 
-本文选取Hybrid A*、SS-RRT*以及DQN系列强化学习算法（MLP/CNN两种网络结构）进行对比。
+训练与仿真测试在随机森林仿真环境中进行。仿真器基于Python实现，以0.1\,m分辨率的二维栅格地图表示环境，树干由随机分布的圆形障碍物模拟（直径0.2--0.6\,m）。训练场地面积为$20\times20$\,m$^2$，测试场地扩展至$30\times30$\,m$^2$以评估泛化能力。每次训练回合随机生成起终点对，要求满足自行车运动学可达性（Hybrid\,A*可规划出路径）。训练在配备NVIDIA RTX 3090 GPU的工作站上完成。
+
+\subsubsection{真实林地地图}
+
+为验证跨域迁移能力，在中国黑龙江省哈尔滨市东北林业大学森林试验场采集真实林地数据。使用Livox Mid-360激光雷达搭配FAST-LIO2~\cite{xu2022fastlio2}构建三维先验点云地图，经可通行性评估后生成二维栅格地图。\textbf{需要强调的是，真实场景实验是在真实林地地图上运行仿真规划器，而非实车部署。}
+
+\subsubsection{基线算法}
+
+本文对比9种算法，包括3种经典规划算法和6种DRL变体：
+
+\begin{itemize}
+  \item \textbf{Hybrid\,A*}：运动学感知的图搜索算法，以自行车模型扩展搜索节点，保证路径运动学可行。
+  \item \textbf{RRT*}：渐近最优的采样规划算法，以随机采样与重连线策略生成路径。
+  \item \textbf{LO-HA*}：局部优化版Hybrid\,A*，在搜索过程中引入局部轨迹优化以降低曲率。
+  \item \textbf{MLP-DQN/DDQN/PDDQN}：MLP网络结构下的三种DQN族变体。
+  \item \textbf{CNN-DQN/DDQN/PDDQN}：CNN网络结构下的三种DQN族变体。
+\end{itemize}
+
+所有DRL变体使用相同的训练超参数（表~\ref{tab:hyperparams}），仅在算法层面（DQN/DDQN/PDDQN）和网络结构（MLP/CNN）上有所区别。每种变体从训练过程中选取验证性能最优的checkpoint用于推理评估。
+
+\subsubsection{四模式评估框架}
+
+为全面评估算法性能，设计四种互补的评估模式（表~\ref{tab:eval_modes}）：
+
+\begin{table}[t]
+\centering
+\caption{四模式评估框架}
+\label{tab:eval_modes}
+\footnotesize
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{模式} & \textbf{路径距离} & \textbf{筛选条件} & \textbf{汇报指标} \\
+\midrule
+Mode\,1 BK-Long & $\geq$18\,m & 自行车运动学可达 & 仅成功率 \\
+Mode\,2 BK-Short & 6--14\,m & 自行车运动学可达 & 仅成功率 \\
+Mode\,3 AllSuc-Long & $\geq$18\,m & 全算法均成功 & 路径质量 \\
+Mode\,4 AllSuc-Short & 6--14\,m & 全算法均成功 & 路径质量 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Mode\,1/2仅报告成功率，因为失败路径无有效路径长度，混入平均值会污染数据。Mode\,3/4仅报告路径质量指标（成功率恒为100\%），消除成功率作为混杂变量的影响，实现公平的路径质量对比。
+
+[TODO: 当前数据基于10组起终点，后续将扩充至100组并增加统计检验]
 
 \subsection{评价指标}
 
-设置四项评价指标：路径长度$L$（m）、平均绝对曲率$\bar{\kappa}$（m$^{-1}$）、规划耗时$T$（s）以及综合得分$S$。对任一指标$x\in\{L,\bar{\kappa},T\}$，其归一化形式为：
+定义以下评价指标：
+
+\textbf{成功率}$SR$：成功到达目标的比例。
+
+\textbf{路径行驶时间}$T_{\text{path}}$（s）：沿路径以规划速度行驶的总时间，综合反映路径长度与速度分配的合理性。
+
+\textbf{平均绝对曲率}$\bar{\kappa}$（m$^{-1}$）：衡量路径平滑性。
+
+\textbf{规划计算时间}$T_{\text{plan}}$（s）：从输入状态到输出完整路径的计算耗时。
+
+\textbf{综合得分}$S_c$：在每个环境分组内，对上述三项指标分别进行min-max归一化后加权求和：
 \begin{equation}
-  \tilde{x} = \frac{x - x_{\min}}{x_{\max} - x_{\min} + \varepsilon}
+  S_c = \frac{w_T \cdot \tilde{T}_{\text{path}} + w_\kappa \cdot \tilde{\bar{\kappa}} + w_P \cdot \tilde{T}_{\text{plan}}}{w_T + w_\kappa + w_P} \cdot \frac{1}{SR}
 \end{equation}
-综合得分$S = 1 - \frac{\tilde{L}+\tilde{\bar{\kappa}}+\tilde{T}}{3}$，越大越好。
+其中$w_T=1.0$、$w_\kappa=0.3$、$w_P=0.2$，权重分配反映路径行驶时间（路径质量的综合体现）占主导地位。$S_c$越低越好，当$SR=0$时设为$+\infty$。
 
 \subsection{仿真场景下的对比验证}
 
