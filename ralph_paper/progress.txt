@@ -5,7 +5,7 @@ Target: Elsevier Measurement (SCI Q1)
 ## Codebase Patterns
 - Paper source: paperdqn8.1/main.tex (edit this, NOT paperdqn8/)
 - Bibliography: paperdqn8.1/references.bib
-- Compile with: cd paperdqn8.1 && pdflatex main.tex
+- Compile with: cd paperdqn8.1 && xelatex main.tex (旧: pdflatex)
 - Original paper is in Chinese with IEEEtran template — converting to English elsarticle
 - Reviewer feedback in paperdqn8.1/paper_review.md — READ BEFORE EACH STORY
 - DO NOT fabricate BibTeX — mark [CITATION NEEDED] if unverified
