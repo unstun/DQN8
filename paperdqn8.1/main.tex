@@ -113,7 +113,68 @@
   \item 在随机森林仿真与真实林地地图上对6种DRL变体与3种经典规划算法进行系统对比验证，证明所提框架下所有DRL变体的规划速度比经典方法快10--20倍，且不同变体在仿真与真实场景中呈现互补优势。
 \end{enumerate}
 
-本文其余部分组织如下：第~\ref{sec:method}节详细介绍所提框架的各组成模块，包括可通行性评估、运动学建模、MDP设计、网络结构与动作掩码机制；第~\ref{sec:results}节给出仿真与真实林地地图上的实验设置、对比结果与消融分析；第~\ref{sec:conclusion}节总结全文并展望未来工作。
+本文其余部分组织如下：第~\ref{sec:related}节回顾UGV经典路径规划、基于DRL的导航和可通行性评估的相关工作；第~\ref{sec:method}节详细介绍所提框架的各组成模块，包括可通行性评估、运动学建模、MDP设计、网络结构与动作掩码机制；第~\ref{sec:results}节给出仿真与真实林地地图上的实验设置、对比结果与消融分析；第~\ref{sec:conclusion}节总结全文并展望未来工作。
+
+% ══════════════════════════════════════════════════════════════
+\section{相关工作}\label{sec:related}
+
+本节从三个维度回顾与本文密切相关的工作：UGV经典路径规划方法、基于DRL的导航方法、以及可通行性评估方法，并在每个子领域定位本文与现有工作的差异。
+
+\subsection{UGV经典路径规划}
+
+面向UGV的经典路径规划方法可分为图搜索、采样和元启发式优化三类。
+
+\textbf{图搜索方法}中，Hybrid\,A*是最具代表性的运动学感知规划器。Thoresen~\etal~\cite{thoresen2021path}率先将地形可通行性评估融入Hybrid\,A*的代价函数，使UGV优先选择低风险路径，是本文的重要参考。Jiang~\etal~\cite{jiang2025hybrid}结合改进D*\,Lite与Hybrid\,A*构建分层框架用于果园窄通道，Lian~\etal~\cite{lian2023trajectory}和Pang~\etal~\cite{pang2022curvature}分别在代客泊车和自动泊车中改进搜索效率。然而，图搜索方法的计算复杂度与搜索空间成正比——本文实验表明Hybrid\,A*在长路径（$\geq$18\,m）中平均耗时3.6\,s，在对实时性要求高的在线规划场景中成为瓶颈。
+
+\textbf{采样方法}中，RRT*及其改进在越野地形中得到广泛研究。Jiang~\etal~\cite{jiang2022r2rrt}和Yin~\etal~\cite{yin2023efficient}分别从概率可靠性和替代模型角度提升RRT*在不确定地形中的鲁棒性，Jian~\etal~\cite{jian2024path}将支撑平面估计耦合到采样扩展过程中。采样方法的局限在于路径质量依赖采样密度，且轨迹平滑性通常不如图搜索方法。
+
+\textbf{元启发式优化方法}（ACO~\cite{cai2024cooperative,huo2024smooth,li2023mixing}、PSO~\cite{xu2022quartic}、ABC~\cite{yildirim2025efficient}）通过群体智能搜索全局路径，但收敛速度受问题规模影响大，且难以显式纳入非完整运动学约束。
+
+\textbf{与本文的区别}：上述经典方法均在推理阶段在线搜索或优化，计算复杂度随环境复杂度增长。本文采用DRL将计算负荷转移至离线训练阶段，推理仅需一次前向传播（$<$0.3\,s），从根本上解决了实时性问题。
+
+\subsection{基于DRL的导航方法}
+
+DRL在机器人路径规划中的应用近年来快速发展，Singh~\etal~\cite{singh2023review}对该领域进行了系统综述。根据算法类型，可分为值函数方法和策略梯度方法两大类。
+
+\textbf{值函数方法}（DQN族）在离散动作空间路径规划中占主导地位。Zhou~\etal~\cite{zhou2018dqn}率先将DQN用于移动机器人栅格路径规划。Han~\etal~\cite{han2023improved}提出双分支DDQN并引入``专家经验''模块加速$\varepsilon$-greedy探索，与本文的DQfD预训练思路相似但仅在简单栅格环境验证。Wang~\etal~\cite{wang2025bilstm}将BiLSTM引入D3QN以增强序列记忆能力。Deguale~\etal~\cite{deguale2024pmr}结合Dueling架构与优先经验回放设计PMR-Dueling\,DQN。Kumar~\etal~\cite{kumar2025dsqn}引入脉冲神经元提升能效比。然而，上述工作普遍假设全向移动或差速驱动机器人，\textbf{均未考虑阿克曼运动学约束}。
+
+\textbf{策略梯度与Actor-Critic方法}（PPO、SAC、TD3等）适用于连续动作空间~[CITATION NEEDED]。S\'{a}nchez~\etal~\cite{sanchez2023rl}采用Actor-Critic配合课程学习用于UGV越野3D\,LiDAR导航，是与本文最为接近的工作之一。Li~\etal~\cite{li2025ugvdwa}提出DRL-DWA分层框架，在全局层面用DRL规划路径、局部层面用动态窗口法跟踪。与连续动作空间方法相比，本文选择DQN族的原因在于：阿克曼车辆的``转向速率$\times$加速度''组合天然映射为有限离散动作查找表（$7\times5=35$种），无需对连续输出进行后处理离散化，策略梯度方差更低~\cite{sichkar2019reinforcement}。
+
+\textbf{奖励塑形}是DRL路径规划的关键设计。M\"{u}ller和Kudenko~\cite{mueller2025pbrs}系统分析了基于势函数的奖励塑形（PBRS）理论，证明合理的势函数初始化可显著提升样本效率。本文的Dijkstra代价场进度奖励属于PBRS的特例，利用到目标的最短路径代价作为势函数引导探索。
+
+\textbf{与本文的区别}：现有DRL导航方法要么面向简单栅格环境~\cite{zhou2018dqn,kumar2025dsqn,deguale2024pmr}，要么假设全向/差速驱动~\cite{wang2025bilstm,han2023improved}。本文的核心差异在于：（1）在DRL中显式嵌入自行车运动学约束与双圆碰撞检测，（2）推理阶段通过动作掩码保障路径安全，（3）在真实森林点云地图上验证。
+
+\subsection{可通行性评估}
+
+可通行性评估是UGV越野导航的前置环节，旨在从传感器数据中判别哪些区域可供车辆安全通行。Benrabah~\etal~\cite{benrabah2024traversability}对UGV可通行性风险评估方法进行了全面综述，将现有方法分为基于几何特征、基于外观和基于学习三大类。
+
+在森林场景中，基于几何特征的方法最为直接：通过分析局部点云的坡度、粗糙度和高程差判断可通行性~\cite{thoresen2021path,jian2024path}。Thoresen~\etal~\cite{thoresen2021path}将可通行性代价直接融入Hybrid\,A*搜索，Jian~\etal~\cite{jian2024path}通过支撑平面估计判断植被地形的可通行性。然而，这些方法将可通行性评估与规划器紧耦合，更换规划算法需重新设计接口。
+
+\textbf{与本文的区别}：本文将可通行性评估作为\textbf{独立的前置模块}——基于局部坡度角统计对点云进行二值分割，生成二维占据栅格和Dijkstra代价场，供下游任意规划算法（DRL或经典方法）使用。这种模块化设计使可通行性评估与DRL规划解耦，便于独立改进和替换。
+
+\subsection{总结与本文定位}
+
+表~\ref{tab:related_comparison}总结了本文与最相关工作的对比。可以看出，现有工作普遍缺乏``\textbf{运动学约束DRL + 动作掩码安全保障 + 森林可通行性评估}''的系统集成。本文的核心贡献在于将上述三者统一到一个框架中，并通过六种DRL变体的系统对比揭示了仿真-真实迁移中不同网络结构的互补特性。
+
+\begin{table*}[t]
+\centering
+\caption{本文与代表性相关工作的对比}
+\label{tab:related_comparison}
+\footnotesize
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+\textbf{方法} & \textbf{算法类型} & \textbf{运动学约束} & \textbf{动作掩码} & \textbf{可通行性} & \textbf{真实地图} & \textbf{多变体对比} \\
+\midrule
+Zhou~\etal~\cite{zhou2018dqn} & DQN & $\times$ & $\times$ & $\times$ & $\times$ & $\times$ \\
+Han~\etal~\cite{han2023improved} & DDQN+Expert & $\times$ & $\times$ & $\times$ & $\checkmark$ & $\times$ \\
+Kumar~\etal~\cite{kumar2025dsqn} & DSQN & $\times$ & $\times$ & $\times$ & $\times$ & $\times$ \\
+S\'{a}nchez~\etal~\cite{sanchez2023rl} & Actor-Critic & $\times$ & $\times$ & $\checkmark$ & $\checkmark$ & $\times$ \\
+Thoresen~\etal~\cite{thoresen2021path} & Hybrid\,A* & $\checkmark$ & --- & $\checkmark$ & $\checkmark$ & $\times$ \\
+Li~\etal~\cite{li2025ugvdwa} & DRL-DWA & $\checkmark$ & $\times$ & $\times$ & $\times$ & $\times$ \\
+\textbf{本文} & \textbf{DQN/DDQN/PDDQN} & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\checkmark$ \\
+\bottomrule
+\end{tabular}
+\end{table*}
 
 % ══════════════════════════════════════════════════════════════
 \section{方法}\label{sec:method}
