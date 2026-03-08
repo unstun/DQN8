@@ -1,27 +1,22 @@
 % !TEX program = xelatex
-\documentclass[conference]{IEEEtran}
+\documentclass[review]{elsarticle}
+
+% ── natbib 配置（elsarticle 内置 natbib，用 \biboptions 设置）──
+\biboptions{numbers,sort&compress}
 
 % ── 宏包 ──────────────────────────────────────────────────────
-\usepackage[utf8]{inputenc}
-\usepackage[T1]{fontenc}
 \usepackage{amsmath,amssymb}
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{multirow}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
-\usepackage[
-  pdftitle={CNN-PDDQN：一种改进的面向森林场景的UGV深度强化学习运动规划方法},
-  pdfsubject={深度强化学习 路径规划 UGV 森林场景},
-  pdfkeywords={可通行性评估, 阿克曼UGV, 深度强化学习, 运动规划, CNN-PDDQN},
-  pdfcreator={XeLaTeX with hyperref},
-]{hyperref}
 \usepackage{xcolor}
 \usepackage{siunitx}
 \usepackage[caption=false]{subfig}
-\usepackage{cite}
 \usepackage{xeCJK}
-\usepackage{longtable}
+\usepackage{lineno}
+\usepackage{hyperref}
 
 % ── CJK 字体 ──────────────────────────────────────────────────
 \setCJKmainfont{Noto Serif CJK SC}
@@ -36,30 +31,35 @@
 \newcommand{\eg}{\textit{e.g.}}
 \newcommand{\etal}{\textit{et al.}}
 
+% ── 目标期刊 ──────────────────────────────────────────────────
+\journal{Measurement}
+
 \begin{document}
+
+\begin{frontmatter}
 
 % ══════════════════════════════════════════════════════════════
 \title{CNN-PDDQN：一种改进的面向森林场景的UGV深度强化学习运动规划方法}
 
-\author{
-\IEEEauthorblockN{Firstname Lastname\textsuperscript{1},
-Firstname Lastname\textsuperscript{2},
-Firstname Lastname\textsuperscript{2,*}}
-\IEEEauthorblockA{\textsuperscript{1}Affiliation 1 \\
-\textsuperscript{2}Affiliation 2 \\
-*Correspondence: e-mail@e-mail.com}
-}
+\author[1]{Firstname Lastname}
+\author[2]{Firstname Lastname}
+\author[2]{Firstname Lastname\corref{cor1}}
+\cortext[cor1]{通讯作者}
+\ead{e-mail@e-mail.com}
 
-\maketitle
+\address[1]{Affiliation 1}
+\address[2]{Affiliation 2}
 
 % ══════════════════════════════════════════════════════════════
 \begin{abstract}
 森林巡检与作业要求自主地面无人车（UGV）在树干密集、地形起伏的非结构化环境中，实时生成满足运动学约束的安全可执行轨迹。针对传统图搜索与采样规划在狭窄通道中计算开销大、轨迹可控性不足的问题，提出一种面向森林场景的深度强化学习运动规划方法。首先利用FAST-LIO2构建先验三维点云地图，并基于可通行性评估生成二维占据栅格及到目标的代价场；随后将规划过程建模为马尔可夫决策过程，设计基于CNN-PDDQN的策略学习框架，并结合双圆足迹碰撞近似与进度/平滑约束构造奖励函数。推理阶段引入在线动作掩码与短视滚动预测的可行域过滤，剔除必碰撞或低收益动作，并配合回退机制与分层验证以降低无效动作选择与振荡风险。随机森林仿真与真实林地实验表明，该方法在路径质量与规划效率之间取得更优折中：仿真长路径任务中CNN-PDDQN生成最短路径$40.197$\,m且规划耗时仅$0.269$\,s，真实林地长路径中MLP-DDQN成功率达$95\%$、规划耗时仅$0.134$\,s，均显著低于传统算法。消融实验进一步验证了奖励函数设计与纯DQN直接控制策略的有效性。
 \end{abstract}
 
-\begin{IEEEkeywords}
-可通行性评估；阿克曼UGV；深度强化学习；运动规划
-\end{IEEEkeywords}
+\begin{keyword}
+可通行性评估 \sep 阿克曼UGV \sep 深度强化学习 \sep 运动规划
+\end{keyword}
+
+\end{frontmatter}
 
 % ══════════════════════════════════════════════════════════════
 \section{介绍}\label{sec:intro}
@@ -531,7 +531,7 @@ Long  & \textbf{0.95} & 0.87 \\
 \textbf{Conflicts of Interest:} 作者声明不存在可能影响本文所报告工作的已知竞争性财务利益或个人关系。
 
 % ══════════════════════════════════════════════════════════════
-\bibliographystyle{IEEEtran}
+\bibliographystyle{elsarticle-num}
 \bibliography{references}
 
 \end{document}
