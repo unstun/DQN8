@@ -179,7 +179,7 @@ Li~\etal~\cite{li2025ugvdwa} & DRL-DWA & $\checkmark$ & $\times$ & $\times$ & $\
 % ══════════════════════════════════════════════════════════════
 \section{方法}\label{sec:method}
 
-如图~\ref{fig:framework}所示，本文提出一种面向森林场景的UGV运动规划框架：首先基于FAST-LIO2构建先验点云地图；随后通过可通行性评估实现点云分割，并生成二维栅格地图；最后在此基础上设计CNN-PDDQN深度强化学习路径规划算法。
+如图~\ref{fig:framework}所示，本文提出一种面向森林场景的约束感知DRL运动规划框架。该框架包含三个阶段：（1）基于FAST-LIO2构建先验三维点云地图；（2）通过可通行性评估实现点云分割，生成二维占据栅格与Dijkstra代价场；（3）在约束感知MDP建模基础上，训练DQN族深度强化学习策略网络（支持MLP和CNN两种结构、DQN/DDQN/PDDQN三种算法共六种组合），并在推理阶段通过动作掩码与可行域过滤保障路径安全。
 
 \begin{figure}[t]
 \centering
@@ -213,9 +213,9 @@ Li~\etal~\cite{li2025ugvdwa} & DRL-DWA & $\checkmark$ & $\times$ & $\times$ & $\
 \begin{equation}
   \theta_{ij} = \arctan\!\left(\frac{|z_i - z_j|}{\sqrt{(x_i-x_j)^2+(y_i-y_j)^2}}\right)
 \end{equation}
-设地面无人车的最大爬坡角为$\alpha_{\max}$，引入松弛因子$\lambda \in [0,1]$，统计邻域内超过坡度阈值的点数比例$r_{\text{slope}}$：
+设地面无人车的最大爬坡角为$\theta_{\max}$，引入松弛因子$\lambda \in [0,1]$，统计邻域内超过坡度阈值的点数比例$r_{\text{slope}}$：
 \begin{equation}
-  r_{\text{slope}} = \frac{1}{|\mathcal{N}(p_i)|}\sum_{p_j\in\mathcal{N}(p_i)}\mathbb{I}(\alpha_{ij} > \alpha_{\max})
+  r_{\text{slope}} = \frac{1}{|\mathcal{N}(p_i)|}\sum_{p_j\in\mathcal{N}(p_i)}\mathbb{I}(\theta_{ij} > \theta_{\max})
 \end{equation}
 若$r_{\text{slope}} \leq \lambda$，则认为点$p_i$所在的局部地形可通行；否则标记为不可通行点。
 
@@ -262,9 +262,9 @@ Li~\etal~\cite{li2025ugvdwa} & DRL-DWA & $\checkmark$ & $\times$ & $\times$ & $\
 
 \subsubsection{马尔可夫决策过程（MDP）建模}
 
-MDP表示为四元组$M=(S,A,P,R)$。
+MDP表示为四元组$M=(S,A,R,\gamma)$，其中$\gamma$为折扣因子。
 
-\textbf{状态空间}$S$：三维环境的特征信息被映射到二维网格中，每个栅格地图的分辨率为$0.1$\,m。状态的前11维为低维标量状态（归一化后的智能体/目标位置、航向正余弦、速度与转角的归一化量等），其余部分为两张大小为$N\times N$的全局栅格图。
+\textbf{状态空间}$S$：状态由标量特征与栅格地图两部分组成。标量部分为11维向量，包含归一化后的智能体位置$(x,y)$、航向角的正余弦$(\cos\psi,\sin\psi)$、速度$v$、转角$\delta$、上一步加速度与转向速率、到目标距离$d_{\text{goal}}$、目标方位角$\alpha$和代价场值。栅格地图部分为$3\times12\times12$的三通道局部地图（分辨率0.1\,m），三个通道分别为占据栅格、Dijkstra代价场和欧几里得距离变换（EDT）间隙图。对于MLP网络，地图被展平后与标量拼接为299维输入；对于CNN网络，地图通过卷积编码器提取特征后再与标量拼接。
 
 \textbf{动作空间}$A$：构造动作查找表$\mathbf{T}\in\mathbb{R}^{35\times2}$，每个动作对应一组$[\dot{\delta}, a]$：
 \begin{equation}
@@ -277,47 +277,75 @@ MDP表示为四元组$M=(S,A,P,R)$。
   R_t = r_{\text{prog}} + r_{\text{time}} + r_{\text{smooth}} + r_{\text{safety}} + r_{\text{term}}
 \end{equation}
 
-\textit{A.~进度奖励}：令$C(s)$为考虑绕障的代价场，则进度奖励$r_{\text{prog}} = k_p(C(s_t) - C(s_{t+1}))$。
+\textit{A.~进度奖励}：令$C(s)$为基于Dijkstra算法计算的考虑绕障的到目标代价场值，则进度奖励为$r_{\text{prog}} = k_p(C(s_t) - C(s_{t+1}))$。该项属于基于势函数的奖励塑形（PBRS）~\cite{mueller2025pbrs}的特例，利用到目标的最短路径代价差引导智能体沿可行方向推进，避免稀疏奖励下的探索困难。
 
-\textit{B.~时间惩罚}：$r_{\text{time}} = -k_t$，鼓励更快完成规划。
+\textit{B.~时间惩罚}：$r_{\text{time}} = -k_t$，每步施加固定负惩罚以鼓励更快到达目标。
 
-\textit{C.~平滑与可控性约束}：引入控制平滑项与曲率惩罚：$r_{\delta} = -k_{\delta}(\delta_{t+1}-\delta_t)^2$，$r_a = -k_a(a_t-a_{t-1})^2(v_{t+1}/v_{\max})^2$，$r_{\kappa} = -k_{\kappa}\tan^2(\delta_{t+1})$。
+\textit{C.~平滑与可控性约束}：引入三项控制平滑惩罚以生成可执行轨迹：转向变化率惩罚$r_{\delta} = -k_{\delta}(\delta_{t+1}-\delta_t)^2$抑制激进转向；加速度变化惩罚$r_a = -k_a(a_t-a_{t-1})^2(v_{t+1}/v_{\max})^2$在高速时更严格约束加速度变化（速度耦合）；曲率惩罚$r_{\kappa} = -k_{\kappa}\tan^2(\delta_{t+1})$抑制大转向角以降低平均曲率。
 
-\textit{D.~安全无碰撞奖励}：取两圆心到最近障碍边界距离$d_1,d_2$，圆半径为$r$，则$OD(s)=\min(d_1-r,\,d_2-r)$。若$OD<d_s$，采用反距离差构造惩罚：
+\textit{D.~安全无碰撞奖励}：取两圆心到最近障碍边界的欧几里得距离$d_1,d_2$，圆半径为$r$，则障碍距离$OD(s)=\min(d_1-r,\,d_2-r)$。当$OD<d_s$时（$d_s=0.2$\,m为安全距离阈值），采用反距离差构造连续递增的惩罚：
 \begin{equation}
   r_{\text{obs}} = -\min\!\left(k_{\text{obs,max}},\, k_o\!\left(\frac{1}{OD+\varepsilon}-\frac{1}{d_s+\varepsilon}\right)\right)
 \end{equation}
+该设计使惩罚在安全距离阈值外为零、在接近障碍物时急剧增大，且通过$k_{\text{obs,max}}$上限防止数值溢出。
 
-\subsubsection{基于CNN-PDDQN的深度强化学习路径规划策略}
+\textit{E.~终端奖励}：到达目标（$d_{\text{goal}}<1.0$\,m）给予$+400$的正奖励，碰撞给予$-200$的惩罚，检测到20步无进展（卡住）给予$-300$的惩罚。
 
-在MDP建模基础上，采用CNN对局部占据栅格/代价图进行特征提取，并以CNN-PDDQN学习离散动作的价值函数，如图~\ref{fig:cnn_pddqn}所示。
+各项系数的具体取值见表~\ref{tab:reward_coefficients}。训练过程中采用Welford在线均值/标准差对原始奖励进行归一化，并裁剪至$[-5, +5]$范围。
+
+\begin{table}[t]
+\centering
+\caption{奖励函数各项系数}
+\label{tab:reward_coefficients}
+\footnotesize
+\begin{tabular}{@{}llcl@{}}
+\toprule
+\textbf{符号} & \textbf{含义} & \textbf{值} & \textbf{作用} \\
+\midrule
+$k_p$ & 进度奖励系数 & 12.0 & 主导项，引导目标趋近 \\
+$k_t$ & 时间惩罚 & 0.1 & 鼓励快速到达 \\
+$k_\delta$ & 转向变化率惩罚 & 1.5 & 抑制激进转向 \\
+$k_a$ & 加速度变化惩罚 & 0.2 & 平滑加速度 \\
+$k_\kappa$ & 曲率惩罚 & 0.2 & 降低平均曲率 \\
+$k_o$ & 障碍物距离系数 & 1.5 & 安全距离保持 \\
+$k_v$ & 速度-距离耦合 & 2.0 & 狭窄通道减速 \\
+$d_s$ & 安全距离阈值 & 0.2\,m & 惩罚激活距离 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{DRL策略网络结构}
+
+本框架支持MLP和CNN两种Q网络结构，如图~\ref{fig:cnn_pddqn}所示。两者共享相同的全连接决策头，区别在于对栅格地图的处理方式。
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{fig_cnn_pddqn.png}
-\caption{CNN-PDDQN路径规划策略的在线推理与训练框架}
+\caption{DRL运动规划框架的在线推理与训练流程}
 \label{fig:cnn_pddqn}
 \end{figure}
 
-\textbf{CNN-Q网络结构}：CNN编码器由3层2D卷积与ReLU组成（无池化层，以步长实现下采样），参数如表~\ref{tab:cnn_structure}所示。
+\textbf{MLP-Q网络}：将$3\times12\times12$的栅格地图展平后（剥离EDT通道仅保留占据和代价共$2\times144=288$维），与11维标量拼接为299维输入，经3层全连接隐层（各256单元，ReLU激活）后输出35维动作价值向量，总参数量约217K。
+
+\textbf{CNN-Q网络}：CNN编码器由3层2D卷积组成（无池化层，以步长下采样），结构参数如表~\ref{tab:cnn_structure}所示。卷积特征（$64\times3\times3=576$维）经展平后与11维标量拼接为587维，送入2层全连接隐层（各256单元），总参数量约282K。
 
 \begin{table}[t]
 \centering
 \caption{CNN编码器结构参数}
 \label{tab:cnn_structure}
 \footnotesize
-\begin{tabular}{@{}ccccc@{}}
+\begin{tabular}{@{}cccccc@{}}
 \toprule
-\textbf{层} & \textbf{卷积核} & \textbf{stride} & \textbf{padding} & \textbf{输出通道} \\
+\textbf{层} & \textbf{输入通道} & \textbf{卷积核} & \textbf{stride} & \textbf{padding} & \textbf{输出通道} \\
 \midrule
-Conv1 & $3\times3$ & 1 & 1 & 32 \\
-Conv2 & $3\times3$ & 2 & 1 & 64 \\
-Conv3 & $3\times3$ & 2 & 1 & 64 \\
+Conv1 & 3 & $3\times3$ & 1 & 1 & 32 \\
+Conv2 & 32 & $3\times3$ & 2 & 1 & 64 \\
+Conv3 & 64 & $3\times3$ & 2 & 1 & 64 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-最终Q函数以拼接特征为输入输出35维动作价值向量：$\mathbf{Q}(s,\cdot) = f_\theta(\mathbf{h})\in\mathbb{R}^{35}$，输入维度为$11+d_{\text{cnn}}$，输出维度为35。
+两种网络最终均输出35维动作价值向量$\mathbf{Q}(s,\cdot) = f_\theta(\mathbf{h})\in\mathbb{R}^{35}$。CNN通过局部感受野提取栅格地图的空间纹理特征，在训练环境中具有更强的障碍物模式识别能力；MLP仅依赖标量特征和展平地图值，计算量更低且对环境纹理变化更具鲁棒性。
 
 \textbf{自适应动作选择策略}：为降低选择``高Q但不可执行动作''的概率，引入在线可行域过滤机制。对任一候选动作$a_i$，在固定预测步长$H$内保持控制量不变，进行前向积分得到预测轨迹$\hat{x}_{t+1:t+H}^{(i)}$，据此定义可采纳动作集合：
 \begin{equation}
@@ -340,14 +368,67 @@ Conv3 & $3\times3$ & 2 & 1 & 64 \\
 \end{equation}
 其中$a^* = \arg\max_{a'\in A(s')}Q_\theta(s',a')$，并最小化Huber损失更新$\theta$。
 
-完整训练与在线规划伪代码如图~\ref{fig:algorithm}所示。
+\subsubsection{DQfD专家预训练}
 
-\begin{figure}[t]
+为加速策略收敛并提升初始探索质量，采用基于演示的深度Q学习（DQfD）进行预训练。预训练分两步：首先利用Hybrid\,A*规划器在训练环境中生成40\,000步专家演示轨迹，存入经验回放缓冲区；随后在演示样本上训练Q网络，损失函数包含行为克隆项和大边际项：
+\begin{equation}
+  L_{\text{expert}} = \lambda_{\text{ce}} \cdot \text{CE}(Q, a_{\text{demo}}) + \lambda_{\text{margin}} \cdot \max(0, \max_{a'\neq a_{\text{demo}}} Q(s,a') + m - Q(s,a_{\text{demo}}))
+\end{equation}
+其中$\lambda_{\text{ce}}=0.1$为行为克隆权重，$\lambda_{\text{margin}}=0.5$为边际损失权重，$m=1.0$为边际阈值。正式训练开始后，演示样本永久保留在经验回放中，同时以衰减概率$p_{\text{expert}}(t) = 0.5 \times 0.7^t$继续混入专家动作。
+
+\subsubsection{训练超参数}
+
+六种DRL变体在训练过程中共享相同的超参数（表~\ref{tab:hyperparams}），仅在TD目标计算（DQN vs Double\,DQN）和目标网络更新方式（硬更新$\tau=0$ vs Polyak软更新$\tau=0.01$）上有所区别。
+
+\begin{table}[t]
 \centering
-\includegraphics[width=\columnwidth]{fig_algorithm.png}
-\caption{CNN-PDDQN训练与在线规划流程（伪代码）}
-\label{fig:algorithm}
-\end{figure}
+\caption{训练超参数}
+\label{tab:hyperparams}
+\footnotesize
+\begin{tabular}{@{}llc@{}}
+\toprule
+\textbf{参数} & \textbf{符号} & \textbf{值} \\
+\midrule
+折扣因子 & $\gamma$ & 0.995 \\
+学习率（Adam） & $\alpha$ & $5\times10^{-4}$ \\
+批大小 & $B$ & 128 \\
+经验回放容量 & $|\mathcal{D}|$ & 100\,000 \\
+$\varepsilon$-greedy 初值/终值/衰减步 & $\varepsilon$ & 0.9 / 0.01 / 2000 \\
+梯度裁剪范数 & --- & 10.0 \\
+硬更新频率（DQN/DDQN） & --- & 每1000步 \\
+Polyak软更新系数（PDDQN） & $\tau$ & 0.01 \\
+DQfD预训练步数 & --- & 40\,000 \\
+训练轮数 & --- & 300 \\
+每轮最大步数 & --- & 800 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+完整的训练与在线推理流程如算法~\ref{alg:training}所示。
+
+\begin{algorithm}[t]
+\caption{约束感知DRL运动规划——训练与推理}
+\label{alg:training}
+\begin{algorithmic}[1]
+\State \textbf{预训练阶段：}
+\State 利用Hybrid\,A*生成专家演示，存入$\mathcal{D}$
+\State 在演示样本上最小化$L_{\text{expert}}$预训练Q网络
+\State \textbf{正式训练（$E$轮）：}
+\For{episode $= 1$ to $E$}
+  \State 初始化环境状态$s_0$，生成栅格地图与代价场
+  \For{$t = 0, 1, \ldots, T_{\max}$}
+    \State 计算可行动作掩码$\mathbf{m} \gets$ \Call{AdmissibleMask}{$s_t, H$}
+    \State $\varepsilon$-greedy选择：$a_t \gets$ \Call{MaskedSelect}{$Q_\theta, s_t, \mathbf{m}, \varepsilon$}
+    \State 执行$a_t$，观测$(r_t, s_{t+1}, \text{done})$
+    \State 存储$(s_t, a_t, r_t, s_{t+1}, \text{done})$至$\mathcal{D}$
+    \State 采样mini-batch，归一化奖励，计算TD目标$y$
+    \State 最小化Huber损失更新$\theta$；更新目标网络$\bar{\theta}$
+  \EndFor
+\EndFor
+\State \textbf{在线推理：}
+\State 输入栅格地图与起终点 $\to$ 贪心选择$a_t = \arg\max_{a \in A_{\text{adm}}} Q_\theta(s_t, a)$
+\end{algorithmic}
+\end{algorithm}
 
 % ══════════════════════════════════════════════════════════════
 \section{结果与讨论}\label{sec:results}
