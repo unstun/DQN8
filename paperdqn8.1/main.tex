@@ -703,7 +703,40 @@ RRT*       & 0.80 & 21.667 & 0.321 & 2.084 & 0.754 \\
 
 \subsection{消融实验}\label{sec:ablation}
 
-为进一步验证所提方法中各设计选项的有效性，设计了两组消融实验。
+为验证所提框架中各设计模块的独立贡献，设计了四组消融实验：动作掩码消融、奖励函数消融、DQN+MPC两阶段架构消融和CNN vs MLP特征分析。
+
+\subsubsection{动作掩码消融}
+
+动作掩码与可行域过滤是所提框架的核心安全保障机制。为量化其贡献，设计以下四种消融变体：
+
+\begin{itemize}
+  \item \textbf{(A) 完整框架}：动作掩码 + 可行域过滤 + 15步前向预测
+  \item \textbf{(B) 无动作掩码}：关闭推理阶段的掩码机制，直接执行Q值最大的动作
+  \item \textbf{(C) 无可行域过滤}：保留碰撞掩码但关闭进度要求（$\Delta J_i \geq \eta$条件）
+  \item \textbf{(D) 无掩码+无过滤}：完全关闭所有推理约束
+\end{itemize}
+
+\begin{table}[t]
+\centering
+\caption{动作掩码消融实验}
+\label{tab:ablation_mask}
+\footnotesize
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+ & \textbf{(A) 完整} & \textbf{(B) 无掩码} & \textbf{(C) 无过滤} & \textbf{(D) 全关} \\
+\midrule
+\multicolumn{5}{l}{\textit{成功率}} \\
+Short & [TODO] & [TODO] & [TODO] & [TODO] \\
+Long  & [TODO] & [TODO] & [TODO] & [TODO] \\
+\midrule
+\multicolumn{5}{l}{\textit{碰撞率}} \\
+Short & [TODO] & [TODO] & [TODO] & [TODO] \\
+Long  & [TODO] & [TODO] & [TODO] & [TODO] \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+[TODO: 待实验填充] 预期结果：去除动作掩码后成功率显著下降，碰撞率急剧升高，因为DRL策略在训练中学习的是带掩码的Q值分布——推理时去掉掩码后，选择的``高Q值''动作可能对应训练中从未被选择过的不安全动作。可行域过滤的去除预计对长路径影响更大，因为长路径中死角和振荡风险更高。
 
 \subsubsection{奖励函数设计消融}
 
@@ -745,7 +778,35 @@ Long  & \textbf{0.95} & 0.87 \\
 \end{tabular}
 \end{table}
 
-结果显示DQN+MPC整体不如纯DQN：Short成功率从0.92降至0.77（-16\%），Long从0.95降至0.87（-8\%）。根本原因在于，DQN生成的路径不保证可行性（可能绕路、陷入死角或未到达目标），MPC只能``盲目跟踪''，无法修正结构性路径缺陷。相比之下，传统方法（Hybrid A*）的两阶段架构成功率保持不变，因为其规划器保证生成完整可行路径。该结果验证了纯DQN直接控制的优越性。
+结果显示DQN+MPC整体不如纯DQN：Short成功率从0.92降至0.77（$-16\%$），Long从0.95降至0.87（$-8\%$）。根本原因在于，DQN生成的路径不保证可行性（可能绕路、陷入死角或未到达目标），MPC只能``盲目跟踪''，无法修正结构性路径缺陷。相比之下，传统方法（Hybrid A*）的两阶段架构成功率保持不变，因为其规划器保证生成完整可行路径。该结果验证了纯DQN直接控制策略在本框架中的有效性。
+
+\subsubsection{CNN vs MLP特征分析}
+
+表~\ref{tab:cnn_vs_mlp}从网络参数量、输入处理方式和跨域性能三个角度对比CNN与MLP两种网络结构。
+
+\begin{table}[t]
+\centering
+\caption{CNN vs MLP网络结构对比}
+\label{tab:cnn_vs_mlp}
+\footnotesize
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{特性} & \textbf{MLP} & \textbf{CNN} \\
+\midrule
+参数量 & 217K & 282K \\
+地图输入方式 & 展平为标量向量 & 卷积特征提取 \\
+隐层数（FC头） & 3 & 2 \\
+空间特征提取 & $\times$ & $\checkmark$（$3\times3$感受野） \\
+仿真长路径得分 & 0.170--0.482 & \textbf{0.078--0.183} \\
+真实长路径成功率 & \textbf{0.75--0.95} & 0.70--0.95 \\
+推理平均耗时 & \textbf{$\sim$0.07--0.21\,s} & $\sim$0.11--0.29\,s \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+CNN在仿真中凭借局部感受野对$12\times12$栅格地图的空间模式（障碍物边缘、通道宽度变化）进行有效编码，在路径质量上具有明显优势。然而，这种空间特征在跨域迁移中成为双刃剑：当真实环境的纹理分布与训练环境差异较大时，卷积特征的泛化能力下降。MLP将地图展平为一维向量，丧失了空间结构信息但也避免了对局部纹理的依赖。
+
+[TODO: 未来可通过Grad-CAM或特征图可视化分析CNN学习到的具体特征，定量解释仿真-真实迁移中的性能退化机理]
 
 % ══════════════════════════════════════════════════════════════
 \section{讨论}\label{sec:discussion}
