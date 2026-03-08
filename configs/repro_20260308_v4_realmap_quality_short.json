@@ -1,0 +1,28 @@
+{
+  "_comment": "V4 Realmap Quality Short: 100 runs, BK-reachable 6-14m, filter_all_succeed, 6 DRL + baselines",
+  "infer": {
+    "envs": ["realmap_a"],
+    "models": "runs/snapshot_20260308_realmap_v4/models",
+    "out": "snapshot_20260308_realmap_v4",
+    "rl_algos": ["mlp-dqn", "mlp-ddqn", "mlp-pddqn", "cnn-dqn", "cnn-ddqn", "cnn-pddqn"],
+    "baselines": ["all"],
+    "rl_mpc_track": true,
+    "random_start_goal": true,
+    "rand_two_suites": false,
+    "runs": 100,
+    "plot_pair_runs": true,
+    "plot_pair_runs_max": 10,
+    "rand_min_cost_m": 6.0,
+    "rand_max_cost_m": 14.0,
+    "rand_tries": 600,
+    "rand_reject_unreachable": true,
+    "filter_all_succeed": true,
+    "max_steps": 600,
+    "goal_tolerance": 1.0,
+    "goal_speed_tol": 999.0,
+    "kpi_time_mode": "policy",
+    "device": "cuda",
+    "cuda_device": 0,
+    "seed": 0
+  }
+}

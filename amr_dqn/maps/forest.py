@@ -100,7 +100,7 @@ def _two_circle_collision(
     return (float(d1) <= thr) or (float(d2) <= thr)
 
 
-def _reachable_bicycle_kinematics(
+def reachable_bicycle_kinematics(
     dist_m: np.ndarray,
     *,
     start_xy: tuple[int, int],
@@ -232,6 +232,46 @@ def _reachable_bicycle_kinematics(
                 heapq.heappush(open_pq, (ng + h_cost(nx, ny), ng, (nx, ny, npsi), nk))
 
     return False
+
+
+def check_bicycle_reachable(
+    dist_m: np.ndarray,
+    *,
+    start_xy: tuple[int, int],
+    goal_xy: tuple[int, int],
+    cell_size_m: float,
+    goal_tolerance_m: float = 1.0,
+) -> bool:
+    """独立于参评算法的 bicycle-kinematic 可达性检查。
+
+    用于推理阶段筛选随机 (start, goal) pair，替代 Hybrid A*
+    以避免 benchmark 公平性偏差。参数使用与环境相同的
+    默认运动学常量（wheelbase=0.6m, delta_max=27°, dt=0.05s）。
+    """
+    eps_cell_m = float(math.sqrt(2.0) * 0.5 * float(cell_size_m))
+    # TwoCircleFootprint 默认参数
+    r_m = float(math.hypot(0.740 / 2.0, 0.924 / 4.0))
+    x1_m = (0.6 / 2.0) - (0.924 / 4.0)
+    x2_m = (0.6 / 2.0) + (0.924 / 4.0)
+    h, w = dist_m.shape
+    return reachable_bicycle_kinematics(
+        dist_m,
+        start_xy=start_xy,
+        goal_xy=goal_xy,
+        cell_size_m=float(cell_size_m),
+        wheelbase_m=0.6,
+        delta_max_rad=float(math.radians(27.0)),
+        dt=0.05,
+        v_m_s=1.0,
+        primitive_steps=4,
+        heading_bins=36,
+        radius_m=float(r_m),
+        x1_m=float(x1_m),
+        x2_m=float(x2_m),
+        eps_cell_m=float(eps_cell_m),
+        goal_tolerance_m=float(goal_tolerance_m),
+        max_expansions=int(w * h * 4),
+    )
 
 
 def _reachable_8(free: np.ndarray, start_xy: tuple[int, int], goal_xy: tuple[int, int]) -> bool:
@@ -530,7 +570,7 @@ def generate_forest_grid(
         x1_m = (0.6 / 2.0) - (0.924 / 4.0)
         x2_m = (0.6 / 2.0) + (0.924 / 4.0)
 
-        if not _reachable_bicycle_kinematics(
+        if not reachable_bicycle_kinematics(
             dist_m,
             start_xy=start_xy,
             goal_xy=goal_xy,

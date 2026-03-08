@@ -1,0 +1,38 @@
+{
+  "_comment": "Codex Stage1 realmap bk_long: isolated search on CPU, 20 runs.",
+  "infer": {
+    "envs": [
+      "realmap_a"
+    ],
+    "models": "runs/codex_20260306_search/realmap/current/models",
+    "out": "runs/codex_20260306_search/realmap/stage1_bk_long",
+    "rl_algos": [
+      "mlp-dqn",
+      "mlp-ddqn",
+      "mlp-pddqn",
+      "cnn-dqn",
+      "cnn-ddqn",
+      "cnn-pddqn"
+    ],
+    "baselines": [
+      "all"
+    ],
+    "rl_mpc_track": false,
+    "random_start_goal": true,
+    "rand_two_suites": false,
+    "plot_pair_runs": false,
+    "rand_reject_unreachable": true,
+    "max_steps": 600,
+    "goal_tolerance": 1.0,
+    "goal_speed_tol": 999.0,
+    "kpi_time_mode": "policy",
+    "seed": 0,
+    "runs": 20,
+    "rand_min_cost_m": 18.0,
+    "rand_max_cost_m": 0.0,
+    "rand_tries": 200,
+    "filter_all_succeed": false,
+    "device": "cpu",
+    "cuda_device": 0
+  }
+}

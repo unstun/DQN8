@@ -1,0 +1,24 @@
+{
+  "_comment": "Screen: v14b Realmap Quality Long, 6 RL algos, no baselines, load 20 allsuc pairs",
+  "infer": {
+    "envs": ["realmap_a"],
+    "models": "v14b_realmap",
+    "out": "screen_v14b_realmap",
+    "rl_algos": ["mlp-dqn", "mlp-ddqn", "mlp-pddqn", "cnn-dqn", "cnn-ddqn", "cnn-pddqn"],
+    "baselines": [],
+    "rl_mpc_track": false,
+    "random_start_goal": true,
+    "rand_two_suites": false,
+    "runs": 20,
+    "plot_pair_runs": false,
+    "load_pairs": "runs/snapshot_20260305_2cat_v1/pairs/realmap_quality_long_allsuc_pairs.json",
+    "filter_all_succeed": false,
+    "max_steps": 600,
+    "goal_tolerance": 1.0,
+    "goal_speed_tol": 999.0,
+    "kpi_time_mode": "policy",
+    "device": "cuda",
+    "cuda_device": 0,
+    "seed": 0
+  }
+}

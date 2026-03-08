@@ -1,0 +1,27 @@
+{
+  "_comment": "Realmap 成功率: BK可达 + 长路径 (>=18m), 100 runs",
+  "infer": {
+    "envs": ["realmap_a"],
+    "models": "repro_20260228_bug2fix_5000ep",
+    "out": "repro_20260228_bug2fix_5000ep",
+    "rl_algos": ["mlp-dqn", "mlp-ddqn", "mlp-pddqn", "cnn-dqn", "cnn-ddqn", "cnn-pddqn"],
+    "baselines": ["all"],
+    "rl_mpc_track": false,
+    "random_start_goal": true,
+    "rand_two_suites": false,
+    "runs": 100,
+    "plot_pair_runs": false,
+    "rand_min_cost_m": 18.0,
+    "rand_max_cost_m": 0.0,
+    "rand_tries": 600,
+    "rand_reject_unreachable": true,
+    "filter_all_succeed": false,
+    "max_steps": 600,
+    "goal_tolerance": 1.0,
+    "goal_speed_tol": 999.0,
+    "kpi_time_mode": "policy",
+    "device": "cuda",
+    "cuda_device": 0,
+    "seed": 0
+  }
+}

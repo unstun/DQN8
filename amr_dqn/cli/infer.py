@@ -66,12 +66,14 @@ from amr_dqn.baselines.pathplan import (
     forest_two_circle_footprint,
     grid_map_from_obstacles,
     plan_hybrid_astar,
+    plan_lo_hybrid_astar,
     plan_rrt_star,
     point_footprint,
 )
 from amr_dqn.env import AMRBicycleEnv, AMRGridEnv, RewardWeights
 from amr_dqn.forest_policy import forest_select_action
 from amr_dqn.maps import FOREST_ENV_ORDER, REALMAP_ENV_ORDER, get_map_spec
+from amr_dqn.maps.forest import check_bicycle_reachable
 from amr_dqn.metrics import KPI, avg_abs_curvature, max_corner_degree, num_path_corners, path_length
 from amr_dqn.smoothing import chaikin_smooth
 
@@ -1076,6 +1078,35 @@ def build_parser() -> argparse.ArgumentParser:
         help="Forest-only: maximum sampling attempts to find reachable random (start,goal) pairs.",
     )
     ap.add_argument(
+        "--filter-all-succeed",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Post-filter: after all algorithms finish, keep only (env, run_idx) pairs where EVERY algorithm "
+            "reached the goal.  Outputs additional *_filtered.{csv,md} tables.  Useful for fair path-quality "
+            "comparison that removes the effect of success-rate differences."
+        ),
+    )
+    ap.add_argument(
+        "--filter-target-count",
+        type=int,
+        default=0,
+        help=(
+            "When --filter-all-succeed is enabled, keep at most this many all-succeed pairs "
+            "(0 = keep all).  The first N pairs (by run_idx order) are retained."
+        ),
+    )
+    ap.add_argument(
+        "--load-pairs",
+        type=Path,
+        default=None,
+        help=(
+            "Load pre-saved (start, goal) pairs from a JSON file instead of random sampling. "
+            "Overrides --runs with the number of loaded pairs.  Use pairs previously saved by "
+            "--filter-all-succeed runs (allsuc_pairs.json) to avoid re-running the full batch."
+        ),
+    )
+    ap.add_argument(
         "--rand-two-suites",
         action=argparse.BooleanOptionalAction,
         default=False,
@@ -1190,6 +1221,11 @@ def main(argv: list[str] | None = None) -> int:
         "ss-rrt*": "rrt_star",
         "ss_rrt_star": "rrt_star",
         "ss_rrt*": "rrt_star",
+        "lo_hybrid_astar": "lo_hybrid_astar",
+        "lo-ha*": "lo_hybrid_astar",
+        "lo_ha*": "lo_hybrid_astar",
+        "loha": "lo_hybrid_astar",
+        "lo-hybrid-a-star": "lo_hybrid_astar",
         "all": "all",
     }
     baselines: list[str] = []
@@ -1200,10 +1236,10 @@ def main(argv: list[str] | None = None) -> int:
         mapped = baseline_aliases.get(key)
         if mapped is None:
             raise SystemExit(
-                f"Unknown baseline {raw!r}. Options: hybrid_astar, rrt_star, all (aliases: hybrid, rrt, rrt*)."
+                f"Unknown baseline {raw!r}. Options: hybrid_astar, rrt_star, lo_hybrid_astar, all (aliases: hybrid, rrt, rrt*, lo-ha*, loha)."
             )
         if mapped == "all":
-            baselines = ["hybrid_astar", "rrt_star"]
+            baselines = ["hybrid_astar", "rrt_star", "lo_hybrid_astar"]
             break
         if mapped not in baselines:
             baselines.append(mapped)
@@ -1455,10 +1491,31 @@ def main(argv: list[str] | None = None) -> int:
 
         # Optional: sample a fixed set of (start, goal) pairs for fair random-start/goal evaluation.
         reset_options_list: list[dict[str, object] | None] = [None] * int(max(0, int(args.runs)))
-        precomputed_hybrid_paths: list[PlannerResult] | None = None
+        # 已移除 precomputed_hybrid_paths，Hybrid A* 评估阶段始终重新规划
         plot_start_xy = tuple(spec.start_xy)
         plot_goal_xy = tuple(spec.goal_xy)
-        if bool(getattr(args, "random_start_goal", False)) and isinstance(env, AMRBicycleEnv) and int(args.runs) > 0:
+
+        # --load-pairs: load pre-saved (start, goal) pairs, skip random sampling.
+        _load_pairs_path = getattr(args, "load_pairs", None)
+        if _load_pairs_path is not None and isinstance(env, AMRBicycleEnv):
+            _lp = Path(_load_pairs_path)
+            if not _lp.exists():
+                raise SystemExit(f"--load-pairs file not found: {_lp}")
+            with open(_lp, "r", encoding="utf-8") as _f:
+                _pairs_data = json.load(_f)
+            _loaded = _pairs_data["pairs"]
+            reset_options_list = [
+                {"start_xy": (int(p["start_xy"][0]), int(p["start_xy"][1])),
+                 "goal_xy": (int(p["goal_xy"][0]), int(p["goal_xy"][1]))}
+                for p in _loaded
+            ]
+            args.runs = len(reset_options_list)
+            print(f"[load-pairs] Loaded {len(reset_options_list)} pairs from {_lp}")
+            if reset_options_list:
+                plot_start_xy = tuple(reset_options_list[plot_run_idx]["start_xy"])  # type: ignore[arg-type]
+                plot_goal_xy = tuple(reset_options_list[plot_run_idx]["goal_xy"])  # type: ignore[arg-type]
+
+        elif bool(getattr(args, "random_start_goal", False)) and isinstance(env, AMRBicycleEnv) and int(args.runs) > 0:
             rand_max = None if float(rand_max_cost_m) <= 0.0 else float(rand_max_cost_m)
             if plot_run_idx >= int(args.runs):
                 raise SystemExit(
@@ -1468,16 +1525,9 @@ def main(argv: list[str] | None = None) -> int:
             reject_unreachable = bool(getattr(args, "rand_reject_unreachable", False))
             max_attempts = max(1, int(getattr(args, "rand_reject_max_attempts", 5000)))
             if reject_unreachable:
-                precomputed_hybrid_paths = []
-                grid_map = grid_map_from_obstacles(grid_y0_bottom=grid, cell_size_m=float(cell_size_m))
-                params = default_ackermann_params(
-                    wheelbase_m=float(env.model.wheelbase_m),
-                    delta_max_rad=float(env.model.delta_max_rad),
-                    v_max_m_s=float(env.model.v_max_m_s),
-                )
-                footprint = forest_two_circle_footprint()
-                goal_xy_tol_m = float(env.goal_tolerance_m)
-                goal_theta_tol_rad = float(env.goal_angle_tolerance_rad)
+                # 使用独立于参评算法的 bicycle-kinematic 可达性检查，
+                # 避免 Hybrid A* 既做筛选器又做参评算法的公平性偏差。
+                pass  # env._dist_m 已在 env 初始化时计算
 
             sample_pbar = None
             if tqdm is not None:
@@ -1526,23 +1576,16 @@ def main(argv: list[str] | None = None) -> int:
                                 accept = False
 
                     if accept and reject_unreachable:
-                        res = plan_hybrid_astar(
-                            grid_map=grid_map,
-                            footprint=footprint,
-                            params=params,
+                        # 用 bicycle-kinematic 可达性检查替代 Hybrid A* 筛选
+                        reachable = check_bicycle_reachable(
+                            env._dist_m,
                             start_xy=start_xy,
                             goal_xy=goal_xy,
-                            goal_theta_rad=0.0,
-                            start_theta_rad=None,
-                            goal_xy_tol_m=goal_xy_tol_m,
-                            goal_theta_tol_rad=goal_theta_tol_rad,
-                            timeout_s=float(args.baseline_timeout),
-                            max_nodes=int(args.hybrid_max_nodes),
+                            cell_size_m=float(cell_size_m),
+                            goal_tolerance_m=float(env.goal_tolerance_m),
                         )
-                        if not bool(res.success):
+                        if not reachable:
                             accept = False
-                        elif precomputed_hybrid_paths is not None:
-                            precomputed_hybrid_paths.append(res)
 
                     if accept:
                         opts: dict[str, object] = {"start_xy": start_xy, "goal_xy": goal_xy}
@@ -1577,6 +1620,8 @@ def main(argv: list[str] | None = None) -> int:
                 total_rollouts += int(args.runs) if use_random_pairs else 1
             if "rrt_star" in baselines:
                 total_rollouts += int(args.runs)
+            if "lo_hybrid_astar" in baselines:
+                total_rollouts += int(args.runs) if use_random_pairs else 1
             if total_rollouts > 0:
                 env_pbar = tqdm(
                     total=int(total_rollouts),
@@ -1897,22 +1942,20 @@ def main(argv: list[str] | None = None) -> int:
                 n_runs = int(args.runs) if use_random_pairs else 1
                 for i in range(n_runs):
                     start_xy, goal_xy, r_opts = pair_for_run(int(i))
-                    if precomputed_hybrid_paths is not None and use_random_pairs and int(i) < len(precomputed_hybrid_paths):
-                        res = precomputed_hybrid_paths[int(i)]
-                    else:
-                        res = plan_hybrid_astar(
-                            grid_map=grid_map,
-                            footprint=footprint,
-                            params=params,
-                            start_xy=start_xy,
-                            goal_xy=goal_xy,
-                            goal_theta_rad=0.0,
-                            start_theta_rad=start_theta_rad,
-                            goal_xy_tol_m=goal_xy_tol_m,
-                            goal_theta_tol_rad=goal_theta_tol_rad,
-                            timeout_s=float(args.baseline_timeout),
-                            max_nodes=int(args.hybrid_max_nodes),
-                        )
+                    # 始终重新规划，不复用缓存，确保公平计时和 success rate
+                    res = plan_hybrid_astar(
+                        grid_map=grid_map,
+                        footprint=footprint,
+                        params=params,
+                        start_xy=start_xy,
+                        goal_xy=goal_xy,
+                        goal_theta_rad=0.0,
+                        start_theta_rad=start_theta_rad,
+                        goal_xy_tol_m=goal_xy_tol_m,
+                        goal_theta_tol_rad=goal_theta_tol_rad,
+                        timeout_s=float(args.baseline_timeout),
+                        max_nodes=int(args.hybrid_max_nodes),
+                    )
 
                     if _ha_split:
                         # --- Plan-only row ("Hybrid A*") ---
@@ -2391,6 +2434,122 @@ def main(argv: list[str] | None = None) -> int:
                         }
                     )
 
+            if "lo_hybrid_astar" in baselines:
+                loha_kpis: list[KPI] = []
+                loha_plan_times: list[float] = []
+                loha_track_times: list[float] = []
+                loha_total_times: list[float] = []
+                loha_success = 0
+
+                n_runs = int(args.runs) if use_random_pairs else 1
+                for i in range(n_runs):
+                    start_xy, goal_xy, r_opts = pair_for_run(int(i))
+                    res = plan_lo_hybrid_astar(
+                        grid_map=grid_map,
+                        footprint=footprint,
+                        params=params,
+                        start_xy=start_xy,
+                        goal_xy=goal_xy,
+                        goal_theta_rad=0.0,
+                        start_theta_rad=start_theta_rad,
+                        goal_xy_tol_m=goal_xy_tol_m,
+                        goal_theta_tol_rad=goal_theta_tol_rad,
+                        timeout_s=float(args.baseline_timeout),
+                        max_nodes=int(args.hybrid_max_nodes),
+                        lo_iterations=0,
+                    )
+
+                    loha_exec_path = list(res.path_xy_cells)
+                    loha_reached = bool(res.success)
+                    loha_track_time_s = 0.0
+                    loha_path_time_s = float("nan")
+                    if bool(res.success) and isinstance(env, AMRBicycleEnv) and bool(getattr(args, "forest_baseline_rollout", False)):
+                        trace_path = None
+                        if bool(getattr(args, "forest_baseline_save_traces", False)) or _save_traces:
+                            trace_path = out_dir / "traces" / f"{_safe_slug(env_case)}__LO_HA__run{int(i)}.csv"
+                        roll = rollout_tracked_path_mpc(
+                            env,
+                            loha_exec_path,
+                            max_steps=args.max_steps,
+                            seed=args.seed + 50_000 + i,
+                            reset_options=r_opts,
+                            time_mode=str(getattr(args, "kpi_time_mode", "policy")),
+                            trace_path=trace_path,
+                            n_candidates=int(getattr(args, "forest_baseline_mpc_candidates", 256)),
+                            collect_controls=bool(int(i) in control_run_indices),
+                        )
+                        loha_exec_path = list(roll.path_xy_cells)
+                        loha_track_time_s = float(roll.compute_time_s)
+                        loha_reached = bool(roll.reached)
+                        loha_path_time_s = float(roll.path_time_s)
+                        if int(i) in control_run_indices and roll.controls is not None:
+                            controls_for_plot.setdefault((env_name, int(i)), {})["LO-HA*"] = roll.controls
+                        if trace_path is not None and _save_traces:
+                            _save_trace_json(
+                                trace_path.parent, trace_path.name,
+                                algorithm="LO-HA*", cell_size_m=float(cell_size_m),
+                                env_base=str(env_base), env_case=str(env_case),
+                                start_xy=start_xy, goal_xy=goal_xy, run_idx=int(i),
+                            )
+
+                    loha_plan_times.append(float(res.time_s))
+                    loha_track_times.append(float(loha_track_time_s))
+                    loha_total_times.append(float(res.time_s) + float(loha_track_time_s))
+                    if int(i) in path_run_indices:
+                        env_paths_by_run[int(i)]["LO-HA*"] = PathTrace(path_xy_cells=loha_exec_path, success=bool(loha_reached))
+
+                    raw_corners = float(num_path_corners(loha_exec_path, angle_threshold_deg=13.0))
+                    smoothed = smooth_path(loha_exec_path, iterations=2)
+                    smoothed_m = [(float(x) * float(cell_size_m), float(y) * float(cell_size_m)) for x, y in smoothed]
+                    if not math.isfinite(float(loha_path_time_s)) and isinstance(env, AMRBicycleEnv):
+                        loha_path_time_s = float(path_length(smoothed_m)) / max(1e-9, float(env.model.v_max_m_s))
+                    run_kpi = KPI(
+                        avg_path_length=float(path_length(smoothed)) * float(cell_size_m),
+                        path_time_s=float(loha_path_time_s),
+                        avg_curvature_1_m=float(avg_abs_curvature(smoothed_m)),
+                        planning_time_s=float(res.time_s),
+                        tracking_time_s=float(loha_track_time_s),
+                        inference_time_s=float(res.time_s) + float(loha_track_time_s),
+                        num_corners=raw_corners,
+                        max_corner_deg=float(max_corner_degree(smoothed)),
+                    )
+                    rows_runs.append(
+                        {
+                            "Environment": str(env_label),
+                            "Algorithm": "LO-HA*",
+                            "run_idx": int(i),
+                            "start_x": int(start_xy[0]),
+                            "start_y": int(start_xy[1]),
+                            "goal_x": int(goal_xy[0]),
+                            "goal_y": int(goal_xy[1]),
+                            "success_rate": 1.0 if bool(loha_reached) else 0.0,
+                            **dict(run_kpi.__dict__),
+                        }
+                    )
+                    if bool(loha_reached) and loha_exec_path:
+                        loha_success += 1
+                        loha_kpis.append(run_kpi)
+                    if env_pbar is not None:
+                        env_pbar.set_postfix_str(f"LO-HA* run {int(i) + 1}/{int(n_runs)}")
+                        env_pbar.update(1)
+
+                k = mean_kpi(loha_kpis)
+                k_dict = dict(k.__dict__)
+                if loha_plan_times:
+                    k_dict["planning_time_s"] = float(np.mean(loha_plan_times))
+                if loha_track_times:
+                    k_dict["tracking_time_s"] = float(np.mean(loha_track_times))
+                if loha_total_times:
+                    k_dict["inference_time_s"] = float(np.mean(loha_total_times))
+                rows.append(
+                    {
+                        "Environment": str(env_label),
+                        "Algorithm": "LO-HA*",
+                        "success_rate": float(loha_success) / float(max(1, int(n_runs))),
+                        **k_dict,
+                    }
+                )
+
         if env_pbar is not None:
             env_pbar.close()
         for run_idx, run_paths in env_paths_by_run.items():
@@ -2572,6 +2731,125 @@ def main(argv: list[str] | None = None) -> int:
     table_mean_pretty.to_csv(out_dir / "table2_kpis_mean.csv", index=False)
     table_mean_pretty.to_markdown(out_dir / "table2_kpis_mean.md", index=False)
 
+    # ---- All-succeed post-filter ----
+    if bool(getattr(args, "filter_all_succeed", False)) and not table.empty:
+        # For each (Environment, run_idx), check that EVERY algorithm reached the goal.
+        _sr = table[["Environment", "Algorithm", "run_idx", "success_rate"]].copy()
+        _sr["_ok"] = pd.to_numeric(_sr["success_rate"], errors="coerce").astype(float) >= 1.0 - 1e-9
+        _all_ok = _sr.groupby(["Environment", "run_idx"], sort=False)["_ok"].all()
+        _keep_all = sorted(_all_ok[_all_ok].index.tolist(), key=lambda t: int(t[1]))  # sorted by run_idx
+        n_total = int(table.groupby("Environment", sort=False)["run_idx"].nunique().max()) if not table.empty else 0
+        n_kept_raw = len({ri for _, ri in _keep_all})
+
+        # --filter-target-count: truncate to first N all-succeed pairs.
+        _ftc = int(getattr(args, "filter_target_count", 0))
+        if _ftc > 0 and len(_keep_all) > _ftc:
+            _keep_all = _keep_all[:_ftc]
+            print(f"[filter-all-succeed] Truncated from {n_kept_raw} to {_ftc} pairs (--filter-target-count).")
+        elif _ftc > 0 and len(_keep_all) < _ftc:
+            print(
+                f"[filter-all-succeed] WARNING: only {len(_keep_all)} all-succeed pairs found, "
+                f"fewer than requested {_ftc}. Consider increasing --runs."
+            )
+
+        _keep = set(_keep_all)
+        n_kept = len({ri for _, ri in _keep})
+        print(f"[filter-all-succeed] Kept {n_kept}/{n_total} run pairs where all algorithms succeeded.")
+
+        # Save all-succeed pairs to JSON for future --load-pairs reuse.
+        _allsuc_pairs: list[dict[str, list[int]]] = []
+        for _env_key, _ri in _keep_all:
+            _pair_rows = table[(table["Environment"] == _env_key) & (table["run_idx"] == _ri)]
+            if not _pair_rows.empty:
+                _row0 = _pair_rows.iloc[0]
+                _allsuc_pairs.append({
+                    "start_xy": [int(_row0["start_x"]), int(_row0["start_y"])],
+                    "goal_xy": [int(_row0["goal_x"]), int(_row0["goal_y"])],
+                    "run_idx": int(_ri),
+                })
+        _pairs_out = out_dir / "allsuc_pairs.json"
+        _pairs_out.write_text(
+            json.dumps({"n_pairs": len(_allsuc_pairs), "pairs": _allsuc_pairs}, indent=2),
+            encoding="utf-8",
+        )
+        print(f"[filter-all-succeed] Saved {len(_allsuc_pairs)} all-succeed pairs to {_pairs_out}")
+
+        table_f = table[table.apply(lambda r: (str(r["Environment"]), int(r["run_idx"])) in _keep, axis=1)].copy()
+        if table_f.empty:
+            print("[filter-all-succeed] WARNING: no pairs survived the filter — skipping filtered tables.")
+        else:
+            # Re-compute mean KPIs from filtered raw rows.
+            _kpi_cols = [
+                "avg_path_length", "path_time_s", "avg_curvature_1_m",
+                "planning_time_s", "tracking_time_s", "num_corners",
+                "inference_time_s", "max_corner_deg",
+            ]
+            _group = table_f.groupby(["Environment", "Algorithm"], sort=False)
+            _n_runs_f = _group["run_idx"].nunique()
+            _sr_f = _group["success_rate"].mean()
+            _means = _group[_kpi_cols].mean()
+            table_mean_f = _means.copy()
+            table_mean_f["success_rate"] = _sr_f
+            table_mean_f["n_filtered_runs"] = _n_runs_f
+            table_mean_f = table_mean_f.reset_index()
+
+            # Recompute composite metrics on filtered means.
+            _w_t = float(args.score_time_weight)
+            _sr_raw_f = pd.to_numeric(table_mean_f["success_rate"], errors="coerce").astype(float)
+            _denom_f = _sr_raw_f.clip(lower=1e-6)
+            _base_f = pd.to_numeric(table_mean_f["avg_path_length"], errors="coerce").astype(float) + _w_t * pd.to_numeric(
+                table_mean_f["inference_time_s"], errors="coerce"
+            ).astype(float)
+            _pc_f = (_base_f / _denom_f).astype(float)
+            _pc_f = _pc_f.where((_sr_raw_f > 0.0) & np.isfinite(_base_f.to_numpy()), other=float("inf"))
+            table_mean_f["planning_cost"] = _pc_f
+
+            _n_pt_f = table_mean_f.groupby(["Environment"], sort=False)["path_time_s"].transform(_minmax_norm).fillna(0.0)
+            _n_k_f = table_mean_f.groupby(["Environment"], sort=False)["avg_curvature_1_m"].transform(_minmax_norm).fillna(0.0)
+            _n_pl_f = table_mean_f.groupby(["Environment"], sort=False)["planning_time_s"].transform(_minmax_norm).fillna(0.0)
+            _bs_f = (w_pt * _n_pt_f + w_k * _n_k_f + w_pl * _n_pl_f) / w_sum
+            _sr_d2_f = _sr_raw_f.clip(lower=1e-6)
+            _cs_f = (_bs_f / _sr_d2_f).astype(float)
+            _cs_f = _cs_f.where(_sr_raw_f > 0.0, other=float("inf"))
+            table_mean_f["composite_score"] = _cs_f
+
+            # Round and write.
+            for c, r in [("success_rate", 3), ("avg_path_length", 4), ("path_time_s", 4),
+                         ("avg_curvature_1_m", 6), ("planning_time_s", 5), ("tracking_time_s", 5),
+                         ("inference_time_s", 5), ("planning_cost", 3), ("composite_score", 3)]:
+                if c in table_mean_f.columns:
+                    table_mean_f[c] = pd.to_numeric(table_mean_f[c], errors="coerce").astype(float).round(r)
+            for c in ["num_corners", "max_corner_deg"]:
+                if c in table_mean_f.columns:
+                    table_mean_f[c] = pd.to_numeric(table_mean_f[c], errors="coerce").round(0).astype("Int64")
+
+            # Write filtered raw table.
+            table_f.to_csv(out_dir / "table2_kpis_raw_filtered.csv", index=False)
+
+            # Write filtered mean table.
+            table_mean_f_pretty = table_mean_f.rename(
+                columns={
+                    "Algorithm": "Algorithm name",
+                    "success_rate": "Success rate",
+                    "avg_path_length": "Average path length (m)",
+                    "path_time_s": "Path time (s)",
+                    "avg_curvature_1_m": "Average curvature (1/m)",
+                    "planning_time_s": "Planning time (s)",
+                    "tracking_time_s": "Tracking time (s)",
+                    "num_corners": "Number of path corners",
+                    "inference_time_s": "Compute time (s)",
+                    "max_corner_deg": "Max corner degree (\u00b0)",
+                    "planning_cost": "Planning cost (m)",
+                    "composite_score": "Composite score",
+                    "n_filtered_runs": "Filtered runs",
+                }
+            )
+            table_mean_f_pretty.to_csv(out_dir / "table2_kpis_mean_filtered.csv", index=False)
+            table_mean_f_pretty.to_markdown(out_dir / "table2_kpis_mean_filtered.md", index=False)
+            print(f"Wrote: {out_dir / 'table2_kpis_raw_filtered.csv'}")
+            print(f"Wrote: {out_dir / 'table2_kpis_mean_filtered.csv'}")
+            print(f"Wrote: {out_dir / 'table2_kpis_mean_filtered.md'}")
+
     # Plot Fig. 12-style paths
     styles = {
         "MLP-DQN": dict(color="tab:blue", linestyle="-", linewidth=2.0),
@@ -2586,6 +2864,7 @@ def main(argv: list[str] | None = None) -> int:
         # Baselines.
         "Hybrid A*": dict(color="tab:purple", linestyle="-", linewidth=2.0),
         "RRT*": dict(color="tab:brown", linestyle="-", linewidth=2.0),
+        "LO-HA*": dict(color="tab:olive", linestyle="-", linewidth=2.0),
     }
 
     def write_paths_figure(
@@ -2838,6 +3117,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Wrote: {out_dir / 'table2_kpis_mean.csv'}")
     print(f"Wrote: {out_dir / 'table2_kpis_mean_raw.csv'}")
     print(f"Wrote: {out_dir / 'table2_kpis_mean.md'}")
+    if bool(getattr(args, "filter_all_succeed", False)):
+        for _fn in ["table2_kpis_raw_filtered.csv", "table2_kpis_mean_filtered.csv", "table2_kpis_mean_filtered.md"]:
+            if (out_dir / _fn).exists():
+                print(f"Wrote: {out_dir / _fn}")
     print(f"Run dir: {out_dir}")
     return 0
 

@@ -1,0 +1,26 @@
+{
+  "_comment": "Screen: Forest SR Long, 6 RL algos, no baselines, 100 runs, BK-reachable >=18m",
+  "infer": {
+    "envs": ["forest_a"],
+    "models": "repro_20260226_v14b_1000ep",
+    "out": "screen_20260306",
+    "rl_algos": ["mlp-dqn", "mlp-ddqn", "mlp-pddqn", "cnn-dqn", "cnn-ddqn", "cnn-pddqn"],
+    "baselines": [],
+    "rl_mpc_track": false,
+    "random_start_goal": true,
+    "rand_two_suites": false,
+    "runs": 100,
+    "plot_pair_runs": false,
+    "rand_min_cost_m": 18.0,
+    "rand_max_cost_m": 0.0,
+    "rand_tries": 400,
+    "rand_reject_unreachable": true,
+    "filter_all_succeed": false,
+    "max_steps": 600,
+    "goal_tolerance": 1.0,
+    "kpi_time_mode": "policy",
+    "device": "cuda",
+    "cuda_device": 0,
+    "seed": 0
+  }
+}

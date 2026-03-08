@@ -322,7 +322,7 @@ class HybridAStarPlanner:
                     remediations=remediations,
                 )
 
-            if self_check and self.analytic_expansion:
+            if self.analytic_expansion:
                 interval = self._analytic_interval(current.state, goal)
                 if interval > 0 and expansion_idx % interval == 0:
                     analytic = self._try_analytic_expansion(current.state, goal)
@@ -446,6 +446,7 @@ class HybridAStarPlanner:
     ):
         length = 0.0
         cusps = 0
+        max_curvature = 0.0  # 论文 Eq.26 第二项所需
         prev_dir: Optional[int] = None
         for i in range(1, len(path)):
             dx = path[i].x - path[i - 1].x
@@ -454,6 +455,10 @@ class HybridAStarPlanner:
         for act in actions[1:] if len(actions) > 1 else []:
             if act is None:
                 continue
+            # 计算该段运动基元的绝对曲率 |κ| = |tan(δ)/L_wb|
+            kappa = abs(math.tan(act.steering) / max(self.params.wheelbase, 1e-9))
+            if kappa > max_curvature:
+                max_curvature = kappa
             if prev_dir is None:
                 prev_dir = act.direction
                 continue
@@ -463,6 +468,7 @@ class HybridAStarPlanner:
         stats = {
             "path_length": length,
             "cusps": cusps,
+            "max_curvature": max_curvature,
             "expansions": expansions,
             "time": elapsed,
             "timed_out": timed_out,

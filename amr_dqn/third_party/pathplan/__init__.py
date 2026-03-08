@@ -5,7 +5,7 @@ Exports planners (abbreviated names in parentheses):
 - RRTStarPlanner (Spline-based RRT* / SS-RRT*)
 """
 
-from .hybrid_a_star import HybridAStarPlanner
+from .hybrid_a_star import HybridAStarPlanner, LOHybridAStarPlanner
 from .rrt_star import RRTStarPlanner
 from .robot import AckermannParams, AckermannState
 from .geometry import OrientedBoxFootprint, TwoCircleFootprint
@@ -13,6 +13,7 @@ from .map_utils import GridMap
 
 __all__ = [
     "HybridAStarPlanner",
+    "LOHybridAStarPlanner",
     "RRTStarPlanner",
     "AckermannParams",
     "AckermannState",
