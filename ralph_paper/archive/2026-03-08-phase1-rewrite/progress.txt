@@ -1,0 +1,92 @@
+# Ralph Progress Log — DQN8 Paper Rewrite
+Started: 2026-03-08
+Target: Elsevier Measurement (SCI Q1)
+
+## Codebase Patterns
+- Paper source: paperdqn8.1/main.tex (edit this, NOT paperdqn8/)
+- Bibliography: paperdqn8.1/references.bib
+- Compile with: cd paperdqn8.1 && xelatex main.tex (旧: pdflatex)
+- Original paper is in Chinese with IEEEtran template — converting to English elsarticle
+- Reviewer feedback in paperdqn8.1/paper_review.md — READ BEFORE EACH STORY
+- DO NOT fabricate BibTeX — mark [CITATION NEEDED] if unverified
+- Framework narrative: the DRL framework is the contribution, not CNN-PDDQN alone
+- Compile with: cd paperdqn8.1 && xelatex main.tex (NOT pdflatex)
+---
+
+## 2026-03-08 - PAPER-001 - 切换 elsarticle review 模板 + 保留中文写作
+- documentclass 从 IEEEtran 切换为 elsarticle review
+- cite 宏包替换为 natbib 数字式（elsarticle 内置，通过 biboptions 配置）
+- bibliographystyle 改为 elsarticle-num
+- 作者块改为 elsarticle frontmatter 格式（\author[label], \address[label]）
+- IEEEkeywords 改为 keyword 环境（\sep 分隔）
+- 移除 inputenc/fontenc/longtable（xelatex 不需要前两者，longtable 未使用）
+- 保留 xeCJK + Noto CJK 字体
+- 添加 lineno 宏包（review 模式行号支持）
+- 改动文件：paperdqn8.1/main.tex
+- **写作决策：**
+  - elsarticle review 模式生成单栏带行号的审稿格式，符合 Measurement 投稿要求
+  - 解决了 paper_review.md 致命问题 #1（模板不匹配）
+  - 未解决：标题仍含 CNN-PDDQN（留给 PAPER-002）
+---
+
+## 2026-03-08 - PAPER-002 - 重写标题 + 重新定位贡献为框架
+- 标题改为"面向森林非结构化环境的约束感知深度强化学习UGV运动规划框架"
+- 贡献列表重写为框架导向：端到端流水线、约束感知MDP、动作掩码+DQfD、系统对比验证
+- 改动文件：paperdqn8.1/main.tex
+- **写作决策：**
+  - 标题不再突出任何单一 DRL 变体，避免与实验数据矛盾（致命问题 #2）
+  - 贡献第4条明确说"不同变体呈现互补优势"，为后续结果分析铺垫
+  - 未解决：摘要仍含旧叙事（留给 PAPER-003）
+---
+
+## 2026-03-08 - PAPER-004 - 重写引言——从堆砌到 gap analysis
+- 引言从纯文献罗列重构为批判性分析论证结构
+- 三个研究空白明确陈述：实时性瓶颈、约束缺失、缺乏集成
+- 论证选择 DQN 族的原因：离散动作空间匹配阿克曼转向查找表
+- 添加论文结构说明段
+- 引言引用 20 篇文献
+- 改动文件：paperdqn8.1/main.tex
+- **写作决策：**
+  - 引言中保留部分文献综述（非纯罗列），PAPER-005 将新增独立相关工作章节做深入对比
+  - 解决了 paper_review.md 致命问题 #3（Introduction 堆砌）和 #4（缺少 gap analysis）
+---
+
+## 2026-03-08 - PAPER-005 - 新增相关工作章节
+- 新增独立相关工作章节分三小节：UGV经典规划、DRL导航、可通行性评估
+- 每小节含批判性对比分析 + "与本文区别"段
+- 添加对比总结表（7种方法 × 6维度）
+- 新增 8 条 BibTeX（singh2023review, benrabah2024traversability, han2023improved, sanchez2023rl, li2025ugvdwa, deguale2024pmr, mueller2025pbrs, wang2025bilstm）
+- 引用 reference_papers/ 中 7 篇论文
+- 改动文件：paperdqn8.1/main.tex, paperdqn8.1/references.bib
+- **写作决策：**
+  - 相关工作按"方法类型"组织，非按时间排列
+  - PPO/SAC 具体文献标 [CITATION NEEDED]（未阅读 PDF 验证）
+  - 解决了 paper_review.md 致命问题 #4（缺少 Related Work）
+---
+
+## 2026-03-08 - PAPER-006 - 重写方法章节——补充深度 + 伪代码 + 超参表
+- 修复符号不一致：α_ij → θ_ij；MDP M=(S,A,P,R) → M=(S,A,R,γ)
+- 方法概述改为框架叙事
+- 状态空间详细描述（11维标量 + 3通道12×12栅格）
+- MLP(217K) vs CNN(282K) 网络对比
+- 奖励函数 8 项系数表 + 物理直觉
+- DQfD 预训练描述（40K步 + BCE + margin loss）
+- 训练超参数表（11项）
+- LaTeX algorithm 环境替换 PNG 伪代码
+- 改动文件：paperdqn8.1/main.tex
+- **写作决策：**
+  - 所有参数从代码验证（networks.py, forest_policy.py, agents.py, env.py）
+  - 保留 CNN 编码器结构表（原有）并增加输入通道列
+  - 解决了 paper_review.md 重大问题 #5（无训练参数）和中等问题 #11（符号不一致）
+---
+
+## 2026-03-08 - PAPER-003 - 重写摘要（结构化 + Highlights）
+- 结构化摘要四段：背景/问题→方法四模块→关键结果→结论
+- 4 条 Highlights（highlights 环境）
+- 关键词扩充为 6 个
+- 改动文件：paperdqn8.1/main.tex
+- **写作决策：**
+  - 摘要结果段同时报告 CNN 和 MLP 优势，避免偏颇
+  - "互补特性"措辞为后续结果/讨论章节铺垫
+  - 解决了 paper_review.md 致命问题 #2 的摘要部分
+---

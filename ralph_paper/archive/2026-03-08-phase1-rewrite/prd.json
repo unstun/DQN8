@@ -1,0 +1,231 @@
+{
+  "project": "DQN8-Paper-SCI-Q1",
+  "branchName": "ralph/paper-rewrite-v2",
+  "description": "将 paperdqn8.1/main.tex 重写为 SCI Q1 水平论文（中文初稿，定稿后再英文润色）",
+  "userStories": [
+    {
+      "id": "PAPER-001",
+      "title": "切换 elsarticle 模板 + 保留中文写作",
+      "description": "将 main.tex 从 IEEEtran 切换到 elsarticle review 模板，但正文保持中文写作。更新文档类、引用格式、页面布局，去掉 IEEEtran 专用命令。",
+      "acceptanceCriteria": [
+        "documentclass 改为 elsarticle review",
+        "natbib 数字式引用取代 cite 宏包",
+        "bibliographystyle 改为 elsarticle-num",
+        "保留 xeCJK 和中文字体（中文写作阶段需要）",
+        "xelatex 编译通过"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "目标期刊 Elsevier Measurement。中文初稿阶段用 xelatex 编译。"
+    },
+    {
+      "id": "PAPER-002",
+      "title": "重写标题 + 重新定位贡献为框架",
+      "description": "当前标题 CNN-PDDQN 有致命问题：CNN-PDDQN 在真实场景成功率最低（70-75%）。重新定位为'受约束 DRL 运动规划框架'，CNN-PDDQN 只是其中一个变体。",
+      "acceptanceCriteria": [
+        "标题不再以 CNN-PDDQN 为核心方法名",
+        "标题强调框架：受约束 DRL + 可通行性评估 + 动作掩码",
+        "贡献列表与框架定位一致",
+        "标题与实验结果无自相矛盾"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "核心叙事：框架（动作掩码 + Dijkstra 奖励塑形 + DQfD 预训练 + 自行车运动学 + 双圆碰撞检测）是贡献，不是任何单一 DRL 变体。框架使所有 6 种 DRL 变体的规划速度比经典方法快 10-20 倍。"
+    },
+    {
+      "id": "PAPER-003",
+      "title": "重写摘要（结构化 + Highlights）",
+      "description": "按 Measurement 要求写结构化摘要：背景/问题、方法、关键结果、结论。不能宣称 CNN-PDDQN 最优，而是强调框架优势。附 3-5 条 Highlights。",
+      "acceptanceCriteria": [
+        "摘要 300-500 字（中文），对应英文 150-250 词",
+        "结构化：问题→方法→结果→结论",
+        "不宣称 CNN-PDDQN 整体最优",
+        "强调框架级优势：规划速度比经典方法快 10-20 倍",
+        "3-5 条 Highlights（中文，后续翻译时每条≤85英文字符）",
+        "关键词 4-6 个"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "可防御的结论：所有 DRL 变体规划耗时 <0.3s，而 Hybrid A* 需 1.5-3.5s；森林仿真中 DRL 成功率 100%；框架生成满足运动学约束的可行路径。"
+    },
+    {
+      "id": "PAPER-004",
+      "title": "重写引言——从堆砌到 gap analysis",
+      "description": "当前引言是纯文献罗列，无批判性分析。重写为：明确 3 个研究空白，解释为什么现有方法在森林 UGV 场景失败，论证选择 DQN 而非 PPO/SAC 的合理性。末尾加论文结构说明段。",
+      "acceptanceCriteria": [
+        "3 个具体研究空白在贡献之前明确陈述",
+        "对现有方法进行批判性分析（不是仅罗列）",
+        "论证 DQN 族优于 actor-critic 的原因（离散动作对应阿克曼转向查找表）",
+        "逻辑流畅：问题背景→现有方法→不足→本文方法→贡献",
+        "末尾论文结构说明段",
+        "引言至少引用 15 篇文献",
+        "每段有明确的论证目的，段间有逻辑过渡"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "三个 gap：(1) 经典规划器在森林实时导航中太慢，(2) 现有 DRL 方法忽略运动学约束和碰撞安全，(3) 无人将可通行性评估与受约束 DRL 结合用于森林 UGV。论证 DQN：离散动作空间天然映射到阿克曼转向查找表。"
+    },
+    {
+      "id": "PAPER-005",
+      "title": "新增相关工作章节",
+      "description": "在引言后新增独立的相关工作章节，分三小节：(1) UGV 经典路径规划, (2) 基于 DRL 的导航, (3) 可通行性评估。每个小节要对比分析，不是罗列。",
+      "acceptanceCriteria": [
+        "独立相关工作章节（第2节）",
+        "三个小节含对比分析",
+        "讨论 PPO/SAC/TD3 并解释为何选 DQN",
+        "引用 reference_papers/ 中至少 5 篇论文",
+        "明确本文与最接近工作的区别",
+        "可选：相关工作对比总结表"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "用 paperdqn8.1/reference_papers/ 中的论文作为来源。核心差异化：(1) 从点云到规划的完整流水线, (2) DRL 中的自行车运动学+双圆碰撞, (3) 可行性动作掩码, (4) 森林专用可通行性评估。"
+    },
+    {
+      "id": "PAPER-006",
+      "title": "重写方法章节——补充深度 + 伪代码 + 超参表",
+      "description": "扩展方法章节：补网络参数量、训练超参数表、DQfD 预训练描述、经验回放细节。用 LaTeX algorithm 环境写伪代码（不用 PNG 截图）。",
+      "acceptanceCriteria": [
+        "LaTeX algorithm/algorithmic 环境写伪代码（替换 PNG 截图）",
+        "训练超参数表（学习率、batch size、gamma、epsilon 衰减等）",
+        "网络结构含参数量描述",
+        "DQfD 预训练过程描述",
+        "奖励函数各项的物理直觉解释",
+        "MDP 四元组中转移概率 P 要么定义要么去掉",
+        "修复符号不一致：theta_ij vs alpha_ij"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "读代码确保准确：configs/*.json 获取训练参数, amr_dqn/networks.py 获取网络架构, amr_dqn/forest_policy.py 获取动作掩码逻辑。"
+    },
+    {
+      "id": "PAPER-007",
+      "title": "规范实验设置 + 评估方法论",
+      "description": "新增正式的实验设置小节：仿真环境描述、真实测试场地细节、评价指标公式、基线算法描述。解释四模式评估框架。去掉'在 PyCharm 平台实现'。",
+      "acceptanceCriteria": [
+        "清晰的实验设置小节含环境描述",
+        "评价指标正式定义，含更新后的 composite score 公式（权重 1.0:0.3:0.2）",
+        "四模式评估说明（BK-Long/Short 报成功率, AllSuc-Long/Short 报质量）",
+        "基线算法含实现细节描述",
+        "样本量说明（标注当前数据规模，预留 100 runs 更新位置）",
+        "不提 PyCharm/IDE",
+        "提及统计检验（如适用）"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "当前表格用 10-run 数据。标注 [TODO: 用 100-run 结果更新]。先建好框架结构。"
+    },
+    {
+      "id": "PAPER-008",
+      "title": "重写结果章节——数据呈现 + 深入分析",
+      "description": "分离结果与讨论。结果章节客观呈现数据并分析每张表/图。增加跨场景对比分析。解释为什么不同变体在不同场景表现最佳。",
+      "acceptanceCriteria": [
+        "结果章节聚焦数据呈现和客观分析",
+        "每张表/图有详细的文字分析（不是读数字）",
+        "跨场景对比：仿真 vs 真实的性能模式分析",
+        "CNN vs MLP 在真实场景的性能差距分析",
+        "规划速度优势量化（10-20 倍于经典方法）",
+        "与框架叙事无矛盾"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": "叙事要点：(1) 所有 DRL 变体比经典方法快 10-20 倍（验证框架价值），(2) CNN 变体在仿真中最优（熟悉的训练环境），(3) MLP 变体在真实地图更鲁棒（更好的泛化），(4) PDDQN 软更新在熟悉环境中用稳定性换路径质量。"
+    },
+    {
+      "id": "PAPER-009",
+      "title": "新增消融实验框架——动作掩码消融",
+      "description": "设计动作掩码消融实验框架：对比有/无动作掩码的性能差异。写清实验设置、表格占位、分析思路。数据待后续实验填充。",
+      "acceptanceCriteria": [
+        "消融实验独立小节",
+        "实验设置清晰描述：控制变量、对比条件",
+        "表格框架：[TODO] 占位符标注待填数据",
+        "预期分析思路写好（动作掩码对安全性/成功率的贡献）",
+        "与现有奖励消融和 DQN+MPC 消融衔接"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": "消融变体：(A) 完整框架, (B) 无动作掩码, (C) 无可行域过滤, (D) 无动作掩码+无可行域过滤。预期：无掩码成功率显著下降。"
+    },
+    {
+      "id": "PAPER-010",
+      "title": "新增消融实验框架——CNN vs MLP 特征分析",
+      "description": "设计 CNN vs MLP 消融分析框架：解释为什么 CNN 在仿真优于 MLP 但在真实场景退化。包含可能的可视化方案（特征图、注意力热力图等）。",
+      "acceptanceCriteria": [
+        "CNN vs MLP 对比分析小节",
+        "从参数量、感受野、特征提取能力角度分析",
+        "解释 sim-to-real gap 的机理假设",
+        "建议可视化方案（如 Grad-CAM 或特征图可视化）[TODO]",
+        "表格框架含参数量对比"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": "核心论点：CNN 在仿真中通过局部纹理特征获得优势，但真实地图的纹理分布与仿真差异大，导致过拟合。MLP 只用标量特征，更具跨域鲁棒性。"
+    },
+    {
+      "id": "PAPER-011",
+      "title": "新增消融实验框架——奖励函数各项贡献",
+      "description": "重新设计奖励消融实验框架（当前消融结果 A 基线反而最好，需要重新解读或重新设计实验）。分解各奖励项的独立贡献。",
+      "acceptanceCriteria": [
+        "奖励消融小节重新组织",
+        "当前结果（A 最好）的合理解读或标注 [TODO: 重新实验]",
+        "新增奖励分解方案：逐项去除（progress / time / smooth / safety）",
+        "表格框架 [TODO] 占位",
+        "分析思路：哪些奖励项对路径质量 vs 成功率的贡献"
+      ],
+      "priority": 11,
+      "passes": true,
+      "notes": "当前问题：基线 A（无 goal shaping + 无速度约束）反而最好。需要解释：(1) 300 轮训练不足以学会复杂奖励, (2) 或者重新设计消融（逐项去除而非叠加）。"
+    },
+    {
+      "id": "PAPER-012",
+      "title": "新增讨论与局限性章节",
+      "description": "新增独立讨论章节：(1) 框架为什么有效, (2) CNN vs MLP 泛化差距, (3) 计算效率分析, (4) 局限性, (5) 未来工作。",
+      "acceptanceCriteria": [
+        "独立讨论章节 500+ 字",
+        "分析 CNN 在真实场景退化原因（过拟合仿真特征）",
+        "讨论动作掩码对安全的贡献",
+        "计算复杂度对比（参数量、FLOPs）",
+        "诚实的局限性小节（至少 3 条）",
+        "未来工作方向（sim-to-real 迁移、实车部署、PPO/SAC 对比）"
+      ],
+      "priority": 12,
+      "passes": true,
+      "notes": "局限性：(1) 仅仿真验证无实车部署, (2) 离散动作空间限制轨迹平滑度, (3) 奖励函数超参需人工调优, (4) 森林专用设计不一定泛化到城市。"
+    },
+    {
+      "id": "PAPER-013",
+      "title": "SCI 级作图方案 + 绘图脚本框架",
+      "description": "设计 SCI 级图表方案：(1) 框架总图重绘方案, (2) 训练曲线图脚本, (3) 路径对比图改进, (4) 消融对比柱状图。所有图要求矢量格式、黑白可读、统一风格。",
+      "acceptanceCriteria": [
+        "每张图的改进方案写在论文注释中或单独文件",
+        "训练曲线绘图脚本框架（dqn8_plots/ 下）[TODO: 需要训练日志]",
+        "图表风格指南：字号≥8pt、线宽≥1pt、矢量 PDF 格式",
+        "路径对比图改进方案（加粗轨迹、增大 legend）",
+        "消融实验柱状图模板脚本",
+        "所有图在黑白打印下可区分（使用不同线型/标记）"
+      ],
+      "priority": 13,
+      "passes": true,
+      "notes": "SCI 作图标准：(1) 矢量格式 PDF/EPS, (2) 字号与正文一致, (3) 颜色+线型双编码保证黑白可读, (4) 图注完整可独立理解, (5) 子图用 (a)(b) 标注。现有 dqn8_plots/run_all.py 可参考。"
+    },
+    {
+      "id": "PAPER-014",
+      "title": "重写结论 + 修复引用 + 最终检查",
+      "description": "重写结论（框架贡献而非仅 CNN-PDDQN），审计 references.bib 正确性，修复符号不一致，检查全文逻辑连贯性。",
+      "acceptanceCriteria": [
+        "结论总结框架贡献（非仅 CNN-PDDQN）",
+        "结论含关键定量发现",
+        "结论不抄摘要",
+        "BibTeX 年份正确（xu2026rl 需核实）",
+        "未验证引用标 [CITATION NEEDED]",
+        "符号全文一致（theta_ij / alpha_ij 统一）",
+        "所有图表在正文中被引用",
+        "致谢和利益冲突声明占位",
+        "xelatex 编译无错误"
+      ],
+      "priority": 14,
+      "passes": true,
+      "notes": "最终 story。只有论文编译通过且作为连贯的 SCI 水平稿件可读时才标 passes:true。"
+    }
+  ]
+}

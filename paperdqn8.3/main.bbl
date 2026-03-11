@@ -1,0 +1,141 @@
+\begin{thebibliography}{10}
+
+\bibitem{jiang2025hybrid}
+Quanjie Jiang, Yue Shen, Hui Liu, Zohaib Khan, Hao Sun, and Yuxuan Huang.
+\newblock A hybrid path planning algorithm for orchard robots based on an
+  improved {D*} {Lite} algorithm.
+\newblock {\em Agriculture}, 15, 2025.
+
+\bibitem{lian2023trajectory}
+Jing Lian, Weiwei Ren, Dongfang Yang, Linhui Li, and Fengning Yu.
+\newblock Trajectory planning for autonomous valet parking in narrow
+  environments with enhanced {Hybrid A*} search and nonlinear optimization.
+\newblock {\em IEEE Trans. Intell. Veh.}, 8:3723--3734, 2023.
+
+\bibitem{pang2022curvature}
+Jinlong Pang, Songyi Zhang, Jiawei Fu, Jianyi Liu, and Nanning Zheng.
+\newblock Curvature continuous path planning with reverse searching for
+  efficient and precise autonomous parking.
+\newblock In {\em 2022 IEEE 25th Int. Conf. Intell. Transp. Syst. (ITSC)},
+  pages 2798--2805, 2022.
+
+\bibitem{thoresen2021path}
+Marius Thoresen, Niels~Hygum Nielsen, Kim Mathiassen, and Kristin~Y. Pettersen.
+\newblock Path planning for {UGVs} based on traversability {Hybrid A*}.
+\newblock {\em IEEE Robot. Autom. Lett.}, 6:1216--1223, 2021.
+
+\bibitem{zhang2024twostage}
+Yichen Zhang, Yafei Wang, Mingyu Wu, Zexing Li, and Ruoyao Li.
+\newblock Two-stage dichotomy {Hybrid A*} for path planning of unmanned mining
+  trucks in large-scale open-pit mine.
+\newblock In {\em 2024 IEEE Int. Conf. Adv. Intell. Mechatron. (AIM)}, pages
+  296--301, 2024.
+
+\bibitem{jian2024path}
+Zhuozhu Jian, Zejia Liu, Haoyu Shao, Xueqian Wang, Xinlei Chen, and Bin Liang.
+\newblock Path generation for wheeled robots autonomous navigation on vegetated
+  terrain.
+\newblock {\em IEEE Robot. Autom. Lett.}, 9:1764--1771, 2024.
+
+\bibitem{jiang2022r2rrt}
+Chen Jiang, Zhen Hu, Zissimos~P. Mourelatos, David Gorsich, Paramsothy
+  Jayakumar, Yan Fu, and Monica Majcher.
+\newblock {R2-RRT*}: Reliability-based robust mission planning of off-road
+  autonomous ground vehicle under uncertain terrain environment.
+\newblock {\em IEEE Trans. Autom. Sci. Eng.}, 19:1030--1046, 2022.
+
+\bibitem{tian2023driving}
+Hongqing Tian, Boqi Li, Heye Huang, and Ling Han.
+\newblock Driving risk-aversive motion planning in off-road environment.
+\newblock {\em Expert Syst. Appl.}, 216:119426, 2023.
+
+\bibitem{yin2023efficient}
+Jianhua Yin, Zhen Hu, Zissimos~P. Mourelatos, David Gorsich, Amandeep Singh,
+  and Seth Tau.
+\newblock Efficient reliability-based path planning of off-road autonomous
+  ground vehicles through the coupling of surrogate modeling and {RRT*}.
+\newblock {\em IEEE Trans. Intell. Transp. Syst.}, 24:15035--15050, 2023.
+
+\bibitem{cai2024cooperative}
+Zhi Cai, Jiahang Liu, Lin Xu, and Jiayi Wang.
+\newblock Cooperative path planning study of distributed multi-mobile robots
+  based on optimised {ACO} algorithm.
+\newblock {\em Robot. Auton. Syst.}, 179:104748, 2024.
+
+\bibitem{huo2024smooth}
+Fengcai Huo, Shuai Zhu, Hongli Dong, and Weijian Ren.
+\newblock A new approach to smooth path planning of {Ackerman} mobile robot
+  based on improved {ACO} algorithm and {B}-spline curve.
+\newblock {\em Robot. Auton. Syst.}, 175:104655, 2024.
+
+\bibitem{li2023mixing}
+Guangxin Li, Chao Liu, Lei Wu, and Wensheng Xiao.
+\newblock A mixing algorithm of {ACO} and {ABC} for solving path planning of
+  mobile robot.
+\newblock {\em Appl. Soft Comput.}, 148:110868, 2023.
+
+\bibitem{xu2022quartic}
+Lin Xu, Maoyong Cao, and Baoye Song.
+\newblock A new approach to smooth path planning of mobile robot based on
+  quartic {Bezier} transition curve and improved {PSO} algorithm.
+\newblock {\em Neurocomputing}, 473:98--106, 2022.
+
+\bibitem{yildirim2025efficient}
+Mustafa~Yusuf Yildirim and Rustu Akay.
+\newblock An efficient grid-based path planning approach using improved
+  artificial bee colony algorithm.
+\newblock {\em Knowl.-Based Syst.}, 318:113528, 2025.
+
+\bibitem{kumar2025dsqn}
+Aakash Kumar, Lei Zhang, Hazrat Bilal, Shifeng Wang, Ali~Muhammad Shaikh,
+  Lu~Bo, Avinash Rohra, and Alisha Khalid.
+\newblock {DSQN}: Robust path planning of mobile robot based on deep spiking
+  {Q}-network.
+\newblock {\em Neurocomputing}, 634:129916, 2025.
+
+\bibitem{li2025iqaco}
+Dongdong Li and Lei Wang.
+\newblock Research on mobile robot path planning based on improved
+  {Q}-evaluation ant colony optimization algorithm.
+\newblock {\em Eng. Appl. Artif. Intell.}, 160:111890, 2025.
+
+\bibitem{maoudj2020optimal}
+Abderraouf Maoudj and Abdelfetah Hentout.
+\newblock Optimal path planning approach based on {Q}-learning algorithm for
+  mobile robots.
+\newblock {\em Appl. Soft Comput.}, 97:106796, 2020.
+
+\bibitem{sichkar2019reinforcement}
+Valentyn~N. Sichkar.
+\newblock Reinforcement learning algorithms in global path planning for mobile
+  robot.
+\newblock In {\em 2019 Int. Conf. Ind. Eng. Appl. Manuf. (ICIEAM)}, pages 1--5,
+  2019.
+
+\bibitem{xu2026rl}
+Fei-xiang Xu, Yan-chen Wang, De-qiang Cheng, Wei-guang An, Chen Zhou, and Qi-qi
+  Kou.
+\newblock Reinforcement learning-driven heuristic path planning method for
+  automated special vehicles in unstructured environment.
+\newblock {\em Robot. Auton. Syst.}, 195:105231, 2026.
+
+\bibitem{zhou2018dqn}
+Siyu Zhou, Xin Liu, Yingfu Xu, and Jifeng Guo.
+\newblock A deep {Q}-network ({DQN}) based path planning method for mobile
+  robots.
+\newblock In {\em 2018 IEEE Int. Conf. Inf. Autom. (ICIA)}, pages 366--371,
+  2018.
+
+\bibitem{xu2022fastlio2}
+Wei Xu, Yixi Cai, Dongjiao He, Jiarong Lin, and Fu~Zhang.
+\newblock {FAST-LIO2}: Fast direct {LiDAR}-inertial odometry.
+\newblock {\em IEEE Trans. Robot.}, 38:2053--2073, 2022.
+
+\bibitem{feng2025constraint}
+Chenlong Feng, Jixin Wang, Qi~Wang, Yuying Shen, Yunda Wei, Shaokai Zhang,
+  Shuyi Zhang, and Quan Zhang.
+\newblock Constraint-aware motion planning for vehicles with terrain
+  traversability assessment and optimization in construction scenarios.
+\newblock {\em Advanced Engineering Informatics}, 68:103625, 2025.
+
+\end{thebibliography}
