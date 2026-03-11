@@ -18,6 +18,7 @@ import types
 
 import cv2
 import numpy as np
+import pandas as pd
 
 from amr_dqn.baselines.pathplan import (
     default_ackermann_params,
@@ -210,11 +211,16 @@ def _random_pairs(grid: np.ndarray, n: int, rng: np.random.RandomState, min_dist
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+OUT_XLSX = "runs/bench_collision_e2e_details.xlsx"
+
+
 def main():
     rng = np.random.RandomState(SEED)
 
-    # Collect all results
-    all_results = []  # list of dicts
+    # Collect per-pair detail rows
+    detail_rows = []
+    # Collect summary rows (same as before)
+    all_results = []
 
     for env_name in ENV_NAMES:
         spec = get_map_spec(env_name)
@@ -259,6 +265,29 @@ def main():
                 else:
                     ok_d, t_d, pl_d, _ = _plan_loha_edt(edt_m=edt_m, **common_base)
 
+                # Record per-pair detail
+                straight_dist = math.hypot(
+                    (goal_xy[0] - start_xy[0]) * CELL_SIZE_M,
+                    (goal_xy[1] - start_xy[1]) * CELL_SIZE_M,
+                )
+                detail_rows.append(dict(
+                    env=env_name,
+                    algo=algo_name,
+                    pair_idx=pi,
+                    start_x=start_xy[0],
+                    start_y=start_xy[1],
+                    goal_x=goal_xy[0],
+                    goal_y=goal_xy[1],
+                    straight_dist_m=round(straight_dist, 2),
+                    exact_success=ok_e,
+                    exact_time_s=round(t_e, 4),
+                    exact_path_len_m=round(pl_e, 2),
+                    edt_success=ok_d,
+                    edt_time_s=round(t_d, 4),
+                    edt_path_len_m=round(pl_d, 2),
+                    time_speedup=round(t_e / t_d, 2) if t_d > 0 else float("inf"),
+                ))
+
                 times_exact.append(t_e)
                 times_edt.append(t_d)
                 if ok_e:
@@ -281,11 +310,11 @@ def main():
                 n_pairs=n,
                 sr_exact=f"{succ_exact}/{n}",
                 sr_edt=f"{succ_edt}/{n}",
-                time_exact_s=avg_t_exact,
-                time_edt_s=avg_t_edt,
-                speedup=speedup,
-                plen_exact_m=avg_pl_exact,
-                plen_edt_m=avg_pl_edt,
+                time_exact_s=round(avg_t_exact, 4),
+                time_edt_s=round(avg_t_edt, 4),
+                speedup=round(speedup, 2),
+                plen_exact_m=round(avg_pl_exact, 2),
+                plen_edt_m=round(avg_pl_edt, 2),
             )
             all_results.append(row)
             print(f"\n  [{algo_name}]")
@@ -294,7 +323,7 @@ def main():
             print(f"    Speedup: {speedup:.2f}x")
 
     # ---------------------------------------------------------------------------
-    # Summary table
+    # Summary table (console)
     # ---------------------------------------------------------------------------
     print(f"\n\n{'='*90}")
     print(f"  SUMMARY TABLE")
@@ -316,6 +345,22 @@ def main():
     print(f"\n  Total planning time (exact): {total_time_exact:.2f}s")
     print(f"  Total planning time (EDT)  : {total_time_edt:.2f}s")
     print(f"  Overall speedup            : {total_time_exact / total_time_edt:.2f}x")
+
+    # ---------------------------------------------------------------------------
+    # Export to Excel (two sheets: detail + summary)
+    # ---------------------------------------------------------------------------
+    import os
+    os.makedirs(os.path.dirname(OUT_XLSX), exist_ok=True)
+
+    df_detail = pd.DataFrame(detail_rows)
+    df_summary = pd.DataFrame(all_results)
+
+    with pd.ExcelWriter(OUT_XLSX, engine="openpyxl") as writer:
+        df_detail.to_excel(writer, sheet_name="Per-Pair Detail", index=False)
+        df_summary.to_excel(writer, sheet_name="Summary", index=False)
+
+    print(f"\n  Excel saved to: {OUT_XLSX}")
+    print(f"  Detail rows: {len(df_detail)}, Summary rows: {len(df_summary)}")
 
 
 if __name__ == "__main__":
