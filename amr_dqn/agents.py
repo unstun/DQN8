@@ -104,6 +104,7 @@ class DQNFamilyAgent:
         config: AgentConfig,
         seed: int = 0,
         device: str | torch.device = "cpu",
+        cnn_drop_edt: bool = False,
     ) -> None:
         canonical_algo, arch, base_algo, _legacy = parse_rl_algo(algo)
         self.algo = canonical_algo
@@ -111,6 +112,7 @@ class DQNFamilyAgent:
         self.base_algo = base_algo
         self.config = config
         self.device = torch.device(device)
+        self.cnn_drop_edt = bool(cnn_drop_edt)
 
         self._rng = np.random.default_rng(seed)
         torch.manual_seed(seed)
@@ -121,6 +123,7 @@ class DQNFamilyAgent:
         # Observation split: CNN uses all 3 map channels (occ + cost + EDT clearance),
         # MLP drops the EDT channel (last N² dims) to avoid extra noise from spatial
         # features that MLP cannot exploit.  See repro_20260222_cnn_edt_channel.json.
+        # When cnn_drop_edt=True, CNN also drops the EDT channel (ablation study).
         self._env_obs_dim = int(obs_dim)
         effective_obs_dim = int(obs_dim)
 
@@ -128,12 +131,22 @@ class DQNFamilyAgent:
         self._net_kwargs: dict[str, object]
         if self.arch == "cnn":
             layout = infer_flat_obs_cnn_layout(int(obs_dim))
-            self._net_cls = CNNQNetwork
-            self._net_kwargs = {
-                "scalar_dim": int(layout.scalar_dim),
-                "map_channels": int(layout.map_channels),
-                "map_size": int(layout.map_size),
-            }
+            if self.cnn_drop_edt:
+                # Ablation: strip EDT channel, keep only occ + cost (2 channels)
+                effective_obs_dim = int(layout.scalar_dim) + 2 * int(layout.map_size) ** 2
+                self._net_cls = CNNQNetwork
+                self._net_kwargs = {
+                    "scalar_dim": int(layout.scalar_dim),
+                    "map_channels": 2,
+                    "map_size": int(layout.map_size),
+                }
+            else:
+                self._net_cls = CNNQNetwork
+                self._net_kwargs = {
+                    "scalar_dim": int(layout.scalar_dim),
+                    "map_channels": int(layout.map_channels),
+                    "map_size": int(layout.map_size),
+                }
         else:
             # Strip the 3rd map channel (EDT) when present: 11+3*N² → 11+2*N².
             map_rem = int(obs_dim) - 11

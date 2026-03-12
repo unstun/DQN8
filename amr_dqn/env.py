@@ -685,6 +685,7 @@ class AMRBicycleEnv(gym.Env):
         stuck_min_disp_m: float = 0.02,
         stuck_min_speed_m_s: float = 0.05,
         stuck_penalty: float = 300.0,
+        edt_collision_margin: str = "half",
     ) -> None:
         super().__init__()
 
@@ -733,7 +734,10 @@ class AMRBicycleEnv(gym.Env):
 
         # Precompute EDT + cost-to-go once (forest maps are static).
         self._eps_cell_m = float(math.sqrt(2.0) * 0.5 * self.cell_size_m)
-        self._half_cell_m = float(0.5 * self.cell_size_m)
+        if edt_collision_margin == "diag":
+            self._half_cell_m = float(math.sqrt(2.0) * 0.5 * self.cell_size_m)
+        else:
+            self._half_cell_m = float(0.5 * self.cell_size_m)
         self._dist_m = compute_edt_distance_m(self._grid, cell_size_m=self.cell_size_m)
         self._diag_m = float(
             math.hypot(float(self._width - 1) * self.cell_size_m, float(self._height - 1) * self.cell_size_m)

@@ -1,0 +1,31 @@
+{
+  "_comment": "Eval: 6-algo forest_half best checkpoints, 20 runs, all distances",
+  "infer": {
+    "envs": ["forest_a"],
+    "models": "algo6_10k_forest",
+    "out": "eval_algo6_10k_forest_half_20runs",
+    "rl_algos": ["cnn-pddqn", "cnn-ddqn", "cnn-dqn", "mlp-pddqn", "mlp-ddqn", "mlp-dqn"],
+    "baselines": [],
+    "rl_mpc_track": false,
+    "random_start_goal": true,
+    "rand_two_suites": false,
+    "runs": 20,
+    "plot_pair_runs": false,
+    "rand_min_cost_m": 6.0,
+    "rand_max_cost_m": 0.0,
+    "rand_tries": 600,
+    "rand_reject_unreachable": true,
+    "filter_all_succeed": false,
+    "max_steps": 600,
+    "goal_tolerance": 1.0,
+    "goal_speed_tol": 999.0,
+    "edt_collision_margin": "half",
+    "kpi_time_mode": "policy",
+    "composite_w_path_time": 1.0,
+    "composite_w_avg_curvature": 0.6,
+    "composite_w_planning_time": 0.2,
+    "device": "cuda",
+    "cuda_device": 0,
+    "seed": 42
+  }
+}

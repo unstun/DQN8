@@ -1,0 +1,30 @@
+{
+  "_comment": "Eval ablation: CNN-DQN without EDT, 20 runs",
+  "infer": {
+    "envs": ["forest_a"],
+    "models": "ablation_cnn_drop_edt",
+    "out": "eval_ablation_drop_edt",
+    "rl_algos": ["cnn-dqn"],
+    "baselines": [],
+    "rl_mpc_track": false,
+    "random_start_goal": true,
+    "runs": 20,
+    "rand_min_cost_m": 6.0,
+    "rand_max_cost_m": 0.0,
+    "rand_tries": 600,
+    "rand_reject_unreachable": true,
+    "filter_all_succeed": false,
+    "max_steps": 600,
+    "goal_tolerance": 1.0,
+    "goal_speed_tol": 999.0,
+    "edt_collision_margin": "half",
+    "kpi_time_mode": "policy",
+    "composite_w_path_time": 1.0,
+    "composite_w_avg_curvature": 0.6,
+    "composite_w_planning_time": 0.2,
+    "device": "cuda",
+    "cuda_device": 0,
+    "seed": 42,
+    "cnn_drop_edt": true
+  }
+}

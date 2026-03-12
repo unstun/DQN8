@@ -5,6 +5,7 @@
     "out": "algo6_10k_forest",
     "rl_algos": ["cnn-pddqn", "cnn-ddqn", "cnn-dqn", "mlp-pddqn", "mlp-ddqn", "mlp-dqn"],
     "episodes": 10000,
+    "replay_capacity": 200000,
     "max_steps": 600,
     "save_every": 10,
     "goal_tolerance": 1.0,

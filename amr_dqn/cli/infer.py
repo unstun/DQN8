@@ -905,6 +905,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--baseline-timeout", type=float, default=5.0, help="Planner timeout (seconds).")
     ap.add_argument("--hybrid-max-nodes", type=int, default=200_000, help="Hybrid A* node budget.")
     ap.add_argument("--rrt-max-iter", type=int, default=5_000, help="RRT* iteration budget.")
+    ap.add_argument("--edt-collision-margin", type=str, default="half",
+                    choices=["half", "diag"],
+                    help="EDT collision margin: 'half'=0.5*cell (default), 'diag'=sqrt(2)/2*cell.")
     ap.add_argument("--max-steps", type=int, default=600)
     ap.add_argument("--sensor-range", type=int, default=6)
     ap.add_argument(
@@ -1156,6 +1159,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print CUDA/runtime info and exit (use to verify CUDA setup).",
     )
+    ap.add_argument(
+        "--cnn-drop-edt",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Ablation: drop the EDT clearance channel from CNN input (keep only occ + cost). Default: False.",
+    )
     return ap
 
 
@@ -1391,6 +1400,7 @@ def main(argv: list[str] | None = None) -> int:
                 obs_map_size=int(args.obs_map_size),
                 goal_tolerance_m=float(args.goal_tolerance),
                 goal_speed_tol_m_s=float(args.goal_speed_tol),
+                edt_collision_margin=getattr(args, "edt_collision_margin", "half"),
             )
             cell_size_m = 0.1
         else:
@@ -1712,7 +1722,7 @@ def main(argv: list[str] | None = None) -> int:
 
             agents: dict[str, DQNFamilyAgent] = {}
             for algo, path in algo_paths.items():
-                a = DQNFamilyAgent(str(algo), obs_dim, n_actions, config=agent_cfg, seed=args.seed, device=device)
+                a = DQNFamilyAgent(str(algo), obs_dim, n_actions, config=agent_cfg, seed=args.seed, device=device, cnn_drop_edt=bool(getattr(args, "cnn_drop_edt", False)))
                 a.load(path)
                 agents[str(algo)] = a
 

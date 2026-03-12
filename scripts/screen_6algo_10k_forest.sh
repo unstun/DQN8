@@ -9,8 +9,12 @@ SCREEN_RAW="$SCREEN_DIR/_raw"
 mkdir -p "$SCREEN_RAW"
 
 TRAIN_DIR="$PROJ/runs/algo6_10k_forest"
-# Will be set after training completes — find latest train dir
-TRAIN_SUB=$(ls -d "$TRAIN_DIR"/train_* 2>/dev/null | sort | tail -1)
+# Use train_merged if available, otherwise latest train dir
+if [ -d "$TRAIN_DIR/train_merged" ]; then
+    TRAIN_SUB="$TRAIN_DIR/train_merged"
+else
+    TRAIN_SUB=$(ls -d "$TRAIN_DIR"/train_* 2>/dev/null | sort | tail -1)
+fi
 if [ -z "$TRAIN_SUB" ]; then
     echo "ERROR: No train directory found under $TRAIN_DIR"
     exit 1

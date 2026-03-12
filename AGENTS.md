@@ -143,6 +143,17 @@ composite_score = base_score / success_rate
 | `runs/v14b_realmap/train_20260307_062153/`                          | Realmap 6-algo 3k            | 6 DRL     | 3000   | paperstoryV1-V3 基础                                                     |
 | `runs/home/sun/phdproject/dqn/DQN8/runs/repro_20260226_v14b_1000ep` | Forest 基线                  | 6 DRL     | 1000   | Forest 环境                                                              |
 
+## 5. 远程服务器
+
+| 优先级 | 名称 | Host | 用户 | 密码 | GPU | 说明 |
+|--------|------|------|------|------|-----|------|
+| 1 | uhost-1nwalbarw6ki | 117.50.216.203 | ubuntu | g7TXK26Q85Jp493f | RTX 4090 (24GB) | 租用 GPU 服务器，Conda ros2py310 已部署 |
+| 2 | ubuntu-zt | (ZeroTier) | sun | — | — | 长期训练服务器，存放 6000+ checkpoints |
+
+- 连接方式：优先用 paramiko（本地无 sshpass）
+- 远端项目路径：`$HOME/DQN8/`
+- 远端 Conda：`$HOME/miniconda3/bin/conda`，环境 `ros2py310`
+
 ## 4. 踩坑
 
 - **SSH 执行必须** `--cwd`：`conda run --cwd $PROJ -n $ENV python ...`
