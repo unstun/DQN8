@@ -174,6 +174,20 @@ def rollout_agent(
     collect_controls: bool = False,
     collect_trace: bool = False,
 ) -> RolloutResult:
+    def sync_cuda() -> None:
+        if agent.device.type == "cuda" and torch.cuda.is_available():
+            torch.cuda.synchronize()
+
+    time_mode = str(time_mode).lower().strip()
+    if time_mode not in {"rollout", "policy"}:
+        raise ValueError("time_mode must be one of: rollout, policy")
+
+    inference_time_s = 0.0
+    sync_cuda()
+    # Start timing BEFORE env.reset() so that rollout mode includes
+    # Dijkstra cost-field and grid-map construction (fair vs baselines).
+    t_rollout0 = time.perf_counter()
+
     obs, _info0 = env.reset(seed=seed, options=reset_options)
     if obs_transform is not None:
         obs = obs_transform(obs)
@@ -207,17 +221,6 @@ def rollout_agent(
             "reward": 0.0,
         }]
 
-    def sync_cuda() -> None:
-        if agent.device.type == "cuda" and torch.cuda.is_available():
-            torch.cuda.synchronize()
-
-    time_mode = str(time_mode).lower().strip()
-    if time_mode not in {"rollout", "policy"}:
-        raise ValueError("time_mode must be one of: rollout, policy")
-
-    inference_time_s = 0.0
-    sync_cuda()
-    t_rollout0 = time.perf_counter()
     done = False
     truncated = False
     steps = 0
