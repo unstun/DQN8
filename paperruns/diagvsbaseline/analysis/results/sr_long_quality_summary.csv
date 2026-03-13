@@ -1,0 +1,4 @@
+Algorithm,n_pairs,path_length_mean,path_length_std,curvature_mean,curvature_std,planning_time_mean,planning_time_std
+CNN-DDQN,6,21.3657,2.3048,0.136267,0.065198,0.30143,0.03719
+RRT*,6,21.3216,2.276,0.146888,0.074884,1.46587,0.5363
+LO-HA*,6,21.2604,2.2759,0.134528,0.083199,2.95816,1.83974

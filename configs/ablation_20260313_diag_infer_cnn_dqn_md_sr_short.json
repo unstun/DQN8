@@ -1,0 +1,36 @@
+{
+  "_comment": "Ablation infer: cnn_dqn_md sr_short, 50 runs realmap",
+  "infer": {
+    "envs": [
+      "realmap_a"
+    ],
+    "baselines": [],
+    "rl_mpc_track": false,
+    "random_start_goal": true,
+    "rand_two_suites": false,
+    "runs": 50,
+    "plot_pair_runs": false,
+    "rand_tries": 600,
+    "rand_reject_unreachable": true,
+    "filter_all_succeed": false,
+    "max_steps": 600,
+    "goal_tolerance": 1.0,
+    "goal_speed_tol": 999.0,
+    "edt_collision_margin": "diag",
+    "kpi_time_mode": "policy",
+    "composite_w_path_time": 1.0,
+    "composite_w_avg_curvature": 0.6,
+    "composite_w_planning_time": 0.2,
+    "device": "cuda",
+    "cuda_device": 0,
+    "seed": 42,
+    "models": "abl_diag_cnn_dqn_md",
+    "out": "abl_diag_infer_cnn_dqn_md",
+    "rl_algos": [
+      "cnn-dqn"
+    ],
+    "rand_min_cost_m": 6.0,
+    "rand_max_cost_m": 14.0,
+    "cnn_drop_edt": true
+  }
+}

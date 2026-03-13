@@ -1,0 +1,89 @@
+{
+  "args": {
+    "baseline_timeout": 5.0,
+    "baselines": [
+      "rrt_star",
+      "lo_hybrid_astar"
+    ],
+    "cell_size": 1.0,
+    "cnn_drop_edt": true,
+    "composite_w_avg_curvature": 0.6,
+    "composite_w_path_time": 1.0,
+    "composite_w_planning_time": 0.2,
+    "config": null,
+    "cuda_device": 0,
+    "device": "cuda",
+    "edt_collision_margin": "diag",
+    "envs": [
+      "realmap_a"
+    ],
+    "filter_all_succeed": false,
+    "filter_target_count": 0,
+    "forest_adm_horizon": 15,
+    "forest_baseline_mpc_candidates": 256,
+    "forest_baseline_rollout": true,
+    "forest_baseline_save_traces": false,
+    "forest_min_od_m": 0.0,
+    "forest_min_progress_m": 0.0001,
+    "forest_topk": 10,
+    "goal_speed_tol": 999.0,
+    "goal_tolerance": 1.0,
+    "hybrid_max_nodes": 200000,
+    "kpi_time_mode": "rollout",
+    "load_pairs": null,
+    "max_steps": 600,
+    "models": "abl_diag_cnn_ddqn_md",
+    "n_sectors": 36,
+    "obs_map_size": 12,
+    "out": "fair_diag_ddqn_md_vs_baseline",
+    "plot_pair_runs": false,
+    "plot_pair_runs_max": 10,
+    "plot_run_idx": 0,
+    "profile": "fair_diag_ddqn_md_vs_baseline_sr_short",
+    "progress": null,
+    "rand_fixed_prob": 0.0,
+    "rand_long_max_cost_m": 0.0,
+    "rand_long_min_cost_m": 18.0,
+    "rand_max_cost_m": 14.0,
+    "rand_min_cost_m": 6.0,
+    "rand_reject_max_attempts": 5000,
+    "rand_reject_unreachable": true,
+    "rand_short_max_cost_m": 14.0,
+    "rand_short_min_cost_m": 6.0,
+    "rand_tries": 600,
+    "rand_two_suites": false,
+    "random_start_goal": true,
+    "rl_algos": [
+      "cnn-ddqn"
+    ],
+    "rl_mpc_track": false,
+    "rrt_max_iter": 5000,
+    "runs": 50,
+    "runs_root": "runs",
+    "save_traces": false,
+    "score_time_weight": 0.5,
+    "seed": 42,
+    "self_check": false,
+    "sensor_range": 6,
+    "skip_rl": false,
+    "timestamp_runs": true
+  },
+  "argv": [
+    "infer.py",
+    "--profile",
+    "fair_diag_ddqn_md_vs_baseline_sr_short"
+  ],
+  "experiment_dir": "runs/fair_diag_ddqn_md_vs_baseline",
+  "kind": "infer",
+  "models_dir": "runs/abl_diag_cnn_ddqn_md/train_20260313_171111/models",
+  "run_dir": "runs/fair_diag_ddqn_md_vs_baseline/20260313_211822_1",
+  "torch": {
+    "cuda_available": true,
+    "device_count": 1,
+    "device_names": [
+      "NVIDIA GeForce RTX 4090"
+    ],
+    "torch_cuda_version": "12.1",
+    "torch_version": "2.5.1+cu121"
+  }
+}

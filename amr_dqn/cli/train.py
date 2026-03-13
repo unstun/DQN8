@@ -1234,6 +1234,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ap.add_argument("--gamma", type=float, default=None, help="Override AgentConfig.gamma (discount factor).")
     ap.add_argument("--learning-rate", type=float, default=None, help="Override AgentConfig.learning_rate.")
+    ap.add_argument("--dueling", action="store_true", default=False, help="Enable Dueling DQN head (CNN only).")
+    ap.add_argument("--mha", action="store_true", default=False, help="Enable Spatial MHA on CNN feature maps.")
+    ap.add_argument("--mha-heads", type=int, default=4, help="Number of heads for Spatial MHA (default: 4).")
     ap.add_argument(
         "--target-update-tau",
         type=float,
@@ -1378,6 +1381,12 @@ def main(argv: list[str] | None = None) -> int:
         agent_kw["gamma"] = float(args.gamma)
     if args.learning_rate is not None:
         agent_kw["learning_rate"] = float(args.learning_rate)
+    if args.dueling:
+        agent_kw["dueling"] = True
+    if args.mha:
+        agent_kw["mha"] = True
+    if args.mha_heads != 4:
+        agent_kw["mha_heads"] = int(args.mha_heads)
     agent_cfg = AgentConfig(**agent_kw)  # type: ignore[arg-type]
 
     # Per-algo configs.  --target-update-tau overrides ALL algos when set.

@@ -54,6 +54,12 @@ class AgentConfig:
     hidden_layers: int = 3
     hidden_dim: int = 256
 
+    # Dueling DQN (Wang et al., 2016): split Q into V(s) + A(s,a) - mean(A).
+    dueling: bool = False
+    # Spatial multi-head self-attention on CNN feature maps.
+    mha: bool = False
+    mha_heads: int = 4
+
     # Expert margin loss (DQfD-style) for forest stabilization.
     demo_margin: float = 0.8
     demo_lambda: float = 1.0
@@ -131,6 +137,11 @@ class DQNFamilyAgent:
         self._net_kwargs: dict[str, object]
         if self.arch == "cnn":
             layout = infer_flat_obs_cnn_layout(int(obs_dim))
+            _cnn_extra = {
+                "dueling": bool(config.dueling),
+                "mha": bool(config.mha),
+                "mha_heads": int(config.mha_heads),
+            }
             if self.cnn_drop_edt:
                 # Ablation: strip EDT channel, keep only occ + cost (2 channels)
                 effective_obs_dim = int(layout.scalar_dim) + 2 * int(layout.map_size) ** 2
@@ -139,6 +150,7 @@ class DQNFamilyAgent:
                     "scalar_dim": int(layout.scalar_dim),
                     "map_channels": 2,
                     "map_size": int(layout.map_size),
+                    **_cnn_extra,
                 }
             else:
                 self._net_cls = CNNQNetwork
@@ -146,6 +158,7 @@ class DQNFamilyAgent:
                     "scalar_dim": int(layout.scalar_dim),
                     "map_channels": int(layout.map_channels),
                     "map_size": int(layout.map_size),
+                    **_cnn_extra,
                 }
         else:
             # Strip the 3rd map channel (EDT) when present: 11+3*N² → 11+2*N².

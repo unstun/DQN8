@@ -50,11 +50,9 @@ ls $PROJ/runs/$EXP/train_*/infer/*/table2_kpis.csv 2>/dev/null && echo DONE || e
 
 ## 3. 论文实验评估框架
 
-### 3.1 双环境×三结果评估体系（paperstoryV1）
+### 3.1 双环境×三结果评估体系
 
-> 权威数据源：`runs/paperstoryV1/`；重现：`python scripts/build_paperstory_v1.py`
-
-**环境**：Forest（简单）、Realmap（复杂）
+**环境**：Realmap（复杂）
 
 **每环境 3 类结果**：
 
@@ -69,34 +67,13 @@ ls $PROJ/runs/$EXP/train_*/infer/*/table2_kpis.csv 2>/dev/null && echo DONE || e
 - **Quality 结果**只报路径质量，成功率恒 100%（消除混杂变量）。
 - 归一化：逐 pair 在 8 算法内 minmax，然后取均值。
 
-### 3.2 Checkpoint 选择规则
-
-1. **目标叙事**：CNN > MLP，PDDQN 为最优变体，其次ddqn，dqn。
-2. **选择方式**：从训练过程中选取各算法的**最佳 checkpoint**（.pt 文件），标准为推理 KPI 综合最优。
-3. **MLP-DQN/DDQN 注意**：hard target update (τ=0) 易导致 Q-value explosion（约 390 轮后）；应选爆炸前的 checkpoint，确保两者数据不同。
-4. **论文表述**：禁止在论文中暴露具体 epoch 编号。
-5. **快照归档**：每次确定权重后，将 .pt + configs + 结果存入 `runs/snapshot_YYYYMMDD_<desc>/`。
+1. gs + 结果存入 `runs/snapshot_YYYYMMDD_<desc>/`。
 
 ### 3.2.1 快照归档 & 论文表述规范
 
 > **详细 SOP 见 `docs/snapshot_sop.md`**（归档目录结构、README 模板、checklist、论文表述禁忌）。
 
 **铁律**：论文中禁止出现具体 checkpoint epoch 编号；归档存入 `runs/snapshot_YYYYMMDD_<desc>/`。
-
-### 3.3 八算法对比
-
-| 算法      | 类型 | base_algo | τ          | 说明                   |
-| --------- | ---- | --------- | ----------- | ---------------------- |
-| MLP-DQN   | DRL  | dqn       | 0.0 (hard)  | 基线 MLP               |
-| MLP-DDQN  | DRL  | ddqn      | 0.0 (hard)  | Double Q               |
-| MLP-PDDQN | DRL  | ddqn      | 0.01 (soft) | Polyak + Double Q      |
-| CNN-DQN   | DRL  | dqn       | 0.0 (hard)  | CNN 特征提取           |
-| CNN-DDQN  | DRL  | ddqn      | 0.0 (hard)  | CNN + Double Q         |
-| CNN-PDDQN | DRL  | ddqn      | 0.01 (soft) | **论文主推方法** |
-| RRT*      | 经典 | —        | —          | 采样规划器             |
-| LO-HA*    | 经典 | —        | —          | 优化版 Hybrid A*       |
-
-> Hybrid A* 因 SR 过低已从评估中排除。
 
 ### 3.4 论文叙事约束
 
@@ -135,20 +112,54 @@ composite_score = base_score / success_rate
 
 ### 3.6 关键训练目录
 
-| 目录                                                                  | 说明                         | 算法      | Epochs | 备注                                                                     |
-| --------------------------------------------------------------------- | ---------------------------- | --------- | ------ | ------------------------------------------------------------------------ |
-| `runs/algo5_10k_realmap/train_20260309_161800/`                     | **Realmap 6-algo 10k** | 6 DRL     | 10000  | 5 algo 新训练 + cnn-pddqn 从 pddqn10k 合并（配置已验证一致）；6000 checkpoints 在远端 ubuntu-zt |
-| `runs/screen_6algo_10k_realmap/`                                    | **10k Screen 推理结果** | 6 DRL     | 100-10000 (每100ep) | sr_long + sr_short × 100 epochs = 200 推理；本地已同步 |
-| `runs/pddqn10k_realmap/train_20260308_073353/`                      | CNN-PDDQN 万轮               | cnn-pddqn | 10000  | 已合并入 algo5_10k                                                       |
-| `runs/v14b_realmap/train_20260307_062153/`                          | Realmap 6-algo 3k            | 6 DRL     | 3000   | paperstoryV1-V3 基础                                                     |
-| `runs/home/sun/phdproject/dqn/DQN8/runs/repro_20260226_v14b_1000ep` | Forest 基线                  | 6 DRL     | 1000   | Forest 环境                                                              |
+| 目录                                                                  | 说明                          | 算法      | Epochs              | 备注                                                                                            |
+| --------------------------------------------------------------------- | ----------------------------- | --------- | ------------------- | ----------------------------------------------------------------------------------------------- |
+| `runs/algo5_10k_realmap/train_20260309_161800/`                     | **Realmap 6-algo 10k**  | 6 DRL     | 10000               | 5 algo 新训练 + cnn-pddqn 从 pddqn10k 合并（配置已验证一致）；6000 checkpoints 在远端 ubuntu-zt |
+| `runs/screen_6algo_10k_realmap/`                                    | **10k Screen 推理结果** | 6 DRL     | 100-10000 (每100ep) | sr_long + sr_short × 100 epochs = 200 推理；本地已同步                                         |
+| `runs/pddqn10k_realmap/train_20260308_073353/`                      | CNN-PDDQN 万轮                | cnn-pddqn | 10000               | 已合并入 algo5_10k                                                                              |
+| `runs/v14b_realmap/train_20260307_062153/`                          | Realmap 6-algo 3k             | 6 DRL     | 3000                | paperstoryV1-V3 基础                                                                            |
+| `runs/home/sun/phdproject/dqn/DQN8/runs/repro_20260226_v14b_1000ep` | Forest 基线                   | 6 DRL     | 1000                | Forest 环境                                                                                     |
+| `runs/abl_md_*/train_*/`                                            | **消融实验 9 变体训练** | 9 DRL     | 5000                | MHA/Dueling 消融，详见 §3.7                                                                    |
+| `runs/abl_md_infer_*/`                                              | **消融实验推理结果**    | 9 DRL     | —                  | 每变体 sr_long + sr_short 各 50 runs                                                            |
+| `paperruns/ablation/`                                               | **消融实验汇总入口**    | —        | —                  | 符号链接，按变体分 train/infer 子目录                                                           |
+
+### 3.7 消融实验（MHA / Dueling）
+
+> 数据位置：`paperruns/ablation/<variant>/{train,infer}`
+
+**消融矩阵**（2 base × 4 模块配置 + MLP 基线 = 9 变体）：
+
+| 变体          | base algo          | MHA (4 heads) | Dueling | cnn_drop_edt |
+| ------------- | ------------------ | ------------- | ------- | ------------ |
+| mlp           | mlp-dqn + mlp-ddqn | ✗            | ✗      | false        |
+| cnn_dqn       | cnn-dqn            | ✗            | ✗      | true         |
+| cnn_ddqn      | cnn-ddqn           | ✗            | ✗      | true         |
+| cnn_dqn_mha   | cnn-dqn            | ✓            | ✗      | true         |
+| cnn_ddqn_mha  | cnn-ddqn           | ✓            | ✗      | true         |
+| cnn_dqn_duel  | cnn-dqn            | ✗            | ✓      | true         |
+| cnn_ddqn_duel | cnn-ddqn           | ✗            | ✓      | true         |
+| cnn_dqn_md    | cnn-dqn            | ✓            | ✓      | true         |
+| cnn_ddqn_md   | cnn-ddqn           | ✓            | ✓      | true         |
+
+**训练参数**（统一）：
+
+- 环境：realmap_a，5000 episodes，seed=0
+- save_every=50（100 个 checkpoint），Checkpoint 自动选择（3 候选 greedy 评估）
+- 其他超参与主线一致（sensor_range=6, obs_map_size=12, n_sectors=36 等）
+
+**推理参数**（统一）：
+
+- 每变体 × 2 场景：sr_long（≥18m）、sr_short（6–14m）
+- runs=50，seed=42（所有变体共享相同起终点对）
+- baselines=[]（纯 DRL 互比，无经典规划器）
+- 直接比较原始指标（SR、路径长度、曲率、规划时间），不做 minmax 归一化
 
 ## 5. 远程服务器
 
-| 优先级 | 名称 | Host | 用户 | 密码 | GPU | 说明 |
-|--------|------|------|------|------|-----|------|
-| 1 | uhost-1nwalbarw6ki | 117.50.216.203 | ubuntu | g7TXK26Q85Jp493f | RTX 4090 (24GB) | 租用 GPU 服务器，Conda ros2py310 已部署 |
-| 2 | ubuntu-zt | (ZeroTier) | sun | — | — | 长期训练服务器，存放 6000+ checkpoints |
+| 优先级 | 名称               | Host           | 用户   | 密码             | GPU             | 说明                                    |
+| ------ | ------------------ | -------------- | ------ | ---------------- | --------------- | --------------------------------------- |
+| 1      | uhost-1nwalbarw6ki | 117.50.216.203 | ubuntu | g7TXK26Q85Jp493f | RTX 4090 (24GB) | 租用 GPU 服务器，Conda ros2py310 已部署 |
+| 2      | ubuntu-zt          | (ZeroTier)     | sun    | —               | —              | 长期训练服务器，存放 6000+ checkpoints  |
 
 - 连接方式：优先用 paramiko（本地无 sshpass）
 - 远端项目路径：`$HOME/DQN8/`

@@ -142,6 +142,38 @@ composite_score = base_score / success_rate
 | `runs/pddqn10k_realmap/train_20260308_073353/`                      | CNN-PDDQN 万轮               | cnn-pddqn | 10000  | 已合并入 algo5_10k                                                       |
 | `runs/v14b_realmap/train_20260307_062153/`                          | Realmap 6-algo 3k            | 6 DRL     | 3000   | paperstoryV1-V3 基础                                                     |
 | `runs/home/sun/phdproject/dqn/DQN8/runs/repro_20260226_v14b_1000ep` | Forest 基线                  | 6 DRL     | 1000   | Forest 环境                                                              |
+| `runs/abl_md_*/train_*/`                                          | **消融实验 9 变体训练** | 9 DRL     | 5000   | MHA/Dueling 消融，详见 §3.7                                              |
+| `runs/abl_md_infer_*/`                                            | **消融实验推理结果**   | 9 DRL     | —     | 每变体 sr_long + sr_short 各 50 runs                                     |
+| `paperruns/ablation/`                                             | **消融实验汇总入口**   | —        | —     | 符号链接，按变体分 train/infer 子目录                                     |
+
+### 3.7 消融实验（MHA / Dueling）
+
+> 数据位置：`paperruns/ablation/<variant>/{train,infer}`
+
+**消融矩阵**（2 base × 4 模块配置 + MLP 基线 = 9 变体）：
+
+| 变体 | base algo | MHA (4 heads) | Dueling | cnn_drop_edt |
+|------|-----------|---------------|---------|--------------|
+| mlp | mlp-dqn + mlp-ddqn | ✗ | ✗ | false |
+| cnn_dqn | cnn-dqn | ✗ | ✗ | true |
+| cnn_ddqn | cnn-ddqn | ✗ | ✗ | true |
+| cnn_dqn_mha | cnn-dqn | ✓ | ✗ | true |
+| cnn_ddqn_mha | cnn-ddqn | ✓ | ✗ | true |
+| cnn_dqn_duel | cnn-dqn | ✗ | ✓ | true |
+| cnn_ddqn_duel | cnn-ddqn | ✗ | ✓ | true |
+| cnn_dqn_md | cnn-dqn | ✓ | ✓ | true |
+| cnn_ddqn_md | cnn-ddqn | ✓ | ✓ | true |
+
+**训练参数**（统一）：
+- 环境：realmap_a，5000 episodes，seed=0
+- save_every=50（100 个 checkpoint），Checkpoint 自动选择（3 候选 greedy 评估）
+- 其他超参与主线一致（sensor_range=6, obs_map_size=12, n_sectors=36 等）
+
+**推理参数**（统一）：
+- 每变体 × 2 场景：sr_long（≥18m）、sr_short（6–14m）
+- runs=50，seed=42（所有变体共享相同起终点对）
+- baselines=[]（纯 DRL 互比，无经典规划器）
+- 直接比较原始指标（SR、路径长度、曲率、规划时间），不做 minmax 归一化
 
 ## 5. 远程服务器
 
